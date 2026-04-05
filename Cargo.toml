@@ -1,7 +1,10 @@
 [package]
 name = "gdsii"
 version = "0.1.0"
+authors = ["Micah Kepe <micahkepe@gmail.com>"]
 edition = "2024"
+readme = "README.md"
+description = "GDSII Rust toolkit library."
 
 [dependencies]
 thiserror = "2.0.18"
