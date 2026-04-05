@@ -8,7 +8,7 @@ GDSII types.
 use zerocopy::big_endian::U16;
 use zerocopy_derive::*;
 
-/// All record types used within a GDSII file.
+/// GDSII Record Type (1 byte).
 ///
 /// Records are always an even number of bytes long. The first four bytes of a record are the
 /// record header (see `RecordHeader`). If a record contains ASCII string data and the ASCII string
@@ -312,8 +312,7 @@ pub enum RecordType {
     EndMasks = 0x38,
 }
 
-/// The fourth byte in the record header contains the data type for the rest of the record. The
-/// record length is used to find the number of  items of the specified datatype.
+/// GDSII Data Type (1 byte)
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, IntoBytes, TryFromBytes, Unaligned)]
 pub enum DataType {
@@ -365,6 +364,9 @@ pub enum DataType {
     /// ```
     FourByteSignedInt = 0x03,
     /// 4-byte real = 2-word floating point representation (See `EightByteReal`).
+    ///
+    /// NOTE: this is not used in practice.
+    #[allow(dead_code, reason = "This data type is not used in practice")]
     FourByteReal = 0x04,
     /// 8-byte real = 4-word floating point representation
     ///
@@ -441,11 +443,23 @@ pub enum DataType {
     AsciiString = 0x06,
 }
 
-/// Record header
+/// GDSII Record header
+///
+/// The Stream format output file is composed of variable length records. Record length is measured
+/// in bytes. The minimum record length is four bytes. Within the record, two bytes (16 bits) is a
+/// word. The 16 bits in a word are numbered 0 to 15, left to right.The first four bytes of a
+/// record compose the recordheader. The first two bytes of the recordheader contain a count (in
+/// eight-bit bytes) of the total record length, so the maximum length is 65536 (64k). The next
+/// record starts immediately after the last byte of the previous record.The third byte of the
+/// header is the record type. The fourth byte of the header identifies the type of data contained
+/// within the record. The fifth until count bytes of a record contain the data.
 #[repr(C)]
 #[derive(TryFromBytes, IntoBytes, Debug, Unaligned)]
 pub struct RecordHeader {
+    /// Count (in eight-bit bytes) of the total record length, so the maximum length is 65536 (64k).
     length: U16,
+    /// Associated record type of header (1 byte).
     record_type: RecordType,
+    /// Associated data type of header (1 byte).
     data_type: DataType,
 }
