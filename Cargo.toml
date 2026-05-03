@@ -5,6 +5,7 @@ authors = ["Micah Kepe <micahkepe@gmail.com>"]
 edition = "2024"
 readme = "README.md"
 description = "GDSII Rust toolkit library."
+exclude = ["./tests/"]
 
 [dependencies]
 thiserror = "2.0.18"
