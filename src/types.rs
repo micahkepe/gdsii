@@ -312,6 +312,20 @@ pub enum RecordType {
     EndMasks = 0x38,
 }
 
+/// Version of GDS on the source.
+///
+/// For reference, see <http://www.layouteditor.net/wiki/GDSII>.
+#[repr(i16)]
+pub enum GdsVersion {
+    /// > Version 3 of the GDS II file format limits the maximum size of polygons/path elements to
+    /// > 200 vertices.
+    V3 = 3,
+    /// > Box elements were introduced with version 4 of the GDS II file format.
+    V4 = 4,
+    /// > he technical limit of the file format structure is 8191 points, which is allowed in
+    /// > version 7.
+    V7 = 7,
+}
 /// GDSII Data Type (1 byte)
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, IntoBytes, TryFromBytes, Unaligned)]
