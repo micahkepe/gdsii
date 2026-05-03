@@ -1,12 +1,14 @@
 /*!
 GDSII types.
 
+NOTE: Underlying byte stream is assumed to be **immutable**.
+
 ## Reference
  * Original manual: <https://www.bitsavers.org/pdf/calma/GDS_II_Users_Operating_Manual_Nov78.pdf>
  * [GDSII format](https://boolean.klaasholwerda.nl/interface/bnf/gdsformat.html)
 */
 use zerocopy::big_endian::U16;
-use zerocopy_derive::*;
+use zerocopy_derive::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 /// GDSII Record Type (1 byte).
 ///
@@ -18,7 +20,7 @@ use zerocopy_derive::*;
 /// are unreleased or unused: STYPTABLE (0x25), STRTYPE (0x25), ELKEY (0x27), LINKTYPE (0x28),
 /// LINKKEYS (0x29), STRCLASS (0x34), RESERVED (0x35).
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, IntoBytes, TryFromBytes, Unaligned)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, IntoBytes, TryFromBytes, Unaligned, Immutable)]
 pub enum RecordType {
     /// Contains two bytes of data representing the Stream version number.
     Header = 0x00,
@@ -317,18 +319,20 @@ pub enum RecordType {
 /// For reference, see <http://www.layouteditor.net/wiki/GDSII>.
 #[repr(i16)]
 pub enum GdsVersion {
-    /// > Version 3 of the GDS II file format limits the maximum size of polygons/path elements to
-    /// > 200 vertices.
+    ///  "Version 3 of the GDS II file format limits the maximum size of polygons/path elements to
+    ///  200 vertices."
     V3 = 3,
-    /// > Box elements were introduced with version 4 of the GDS II file format.
+    /// "Box elements were introduced with version 4 of the GDS II file format."
     V4 = 4,
-    /// > he technical limit of the file format structure is 8191 points, which is allowed in
-    /// > version 7.
+    /// "The technical limit of the file format structure is 8191 points, which is allowed in
+    /// version 7."
     V7 = 7,
 }
 /// GDSII Data Type (1 byte)
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, IntoBytes, TryFromBytes, Unaligned)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, Copy, IntoBytes, TryFromBytes, Unaligned, KnownLayout, Immutable,
+)]
 pub enum DataType {
     NoData = 0x00,
     /// A bit array is a word which uses the value of a particular bit or group of bits to
@@ -461,19 +465,48 @@ pub enum DataType {
 ///
 /// The Stream format output file is composed of variable length records. Record length is measured
 /// in bytes. The minimum record length is four bytes. Within the record, two bytes (16 bits) is a
-/// word. The 16 bits in a word are numbered 0 to 15, left to right.The first four bytes of a
+/// word. The 16 bits in a word are numbered 0 to 15, left to right. The first four bytes of a
 /// record compose the recordheader. The first two bytes of the recordheader contain a count (in
 /// eight-bit bytes) of the total record length, so the maximum length is 65536 (64k). The next
 /// record starts immediately after the last byte of the previous record.The third byte of the
 /// header is the record type. The fourth byte of the header identifies the type of data contained
 /// within the record. The fifth until count bytes of a record contain the data.
 #[repr(C)]
-#[derive(TryFromBytes, IntoBytes, Debug, Unaligned)]
+#[derive(
+    TryFromBytes, PartialEq, Eq, IntoBytes, Debug, Unaligned, KnownLayout, Immutable, Copy, Clone,
+)]
 pub struct RecordHeader {
-    /// Count (in eight-bit bytes) of the total record length, so the maximum length is 65536 (64k).
+    /// Count (in eight-bit bytes) of the total record length, so the maximum length is 65536
+    /// (64k).
     length: U16,
     /// Associated record type of header (1 byte).
     record_type: RecordType,
     /// Associated data type of header (1 byte).
     data_type: DataType,
+}
+
+impl RecordHeader {
+    #[must_use]
+    pub const fn new(length: U16, record_type: RecordType, data_type: DataType) -> Self {
+        Self {
+            length,
+            record_type,
+            data_type,
+        }
+    }
+
+    #[must_use]
+    pub const fn length(&self) -> U16 {
+        self.length
+    }
+
+    #[must_use]
+    pub const fn record_type(&self) -> RecordType {
+        self.record_type
+    }
+
+    #[must_use]
+    pub const fn data_type(&self) -> DataType {
+        self.data_type
+    }
 }
