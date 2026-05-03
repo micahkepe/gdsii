@@ -1,8 +1,74 @@
-//! GDSII reader
+//! GDSII reader for parsing GDS bytes into intermediary types.
+//!
+//! See [`crate::types`] for more details on the over-the-wire raw formats.
 
-use zerocopy::TryFromBytes;
+use zerocopy::{
+    TryFromBytes,
+    big_endian::{I16, I32, U16},
+};
 
-use crate::types::RecordHeader;
+use crate::types::{DataType, RecordHeader};
+
+/// Parsed GDS record, including its header and associated data.
+pub struct Record<'data> {
+    pub header: RecordHeader,
+    pub body: RecordBody<'data>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum RecordBody<'data> {
+    NoData,
+    BitArray(&'data [U16]),
+    TwoByteSignedInt(&'data [I16]),
+    FourByteSignedInt(&'data [I32]),
+    /// NOTE: raw bytes here because needs custom conversion to `f32`.
+    FourByteReal(&'data [[u8; 4]]),
+    /// NOTE: raw bytes here because needs custom conversion to `f64`.
+    EightByteReal(&'data [[u8; 8]]),
+    AsciiString(&'data str),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BodyParseError {
+    #[error("data does not match the expected datatype")]
+    Invalid,
+}
+
+impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
+    type Error = BodyParseError;
+
+    fn try_from((data_type, body): (DataType, &'data [u8])) -> Result<Self, Self::Error> {
+        match data_type {
+            DataType::NoData => Ok(Self::NoData),
+            DataType::BitArray => <[U16]>::try_ref_from_bytes(body)
+                .ok()
+                .map(Self::BitArray)
+                .ok_or(BodyParseError::Invalid),
+            DataType::TwoByteSignedInt => <[I16]>::try_ref_from_bytes(body)
+                .ok()
+                .map(Self::TwoByteSignedInt)
+                .ok_or(BodyParseError::Invalid),
+            DataType::FourByteSignedInt => <[I32]>::try_ref_from_bytes(body)
+                .ok()
+                .map(Self::FourByteSignedInt)
+                .ok_or(BodyParseError::Invalid),
+            DataType::FourByteReal => <[[u8; 4]]>::try_ref_from_bytes(body)
+                .ok()
+                .map(Self::FourByteReal)
+                .ok_or(BodyParseError::Invalid),
+            DataType::EightByteReal => <[[u8; 8]]>::try_ref_from_bytes(body)
+                .ok()
+                .map(Self::EightByteReal)
+                .ok_or(BodyParseError::Invalid),
+            DataType::AsciiString => std::str::from_utf8(body)
+                .map(|s| s.trim_end_matches('\0'))
+                .map_or_else(
+                    |_| Err(BodyParseError::Invalid),
+                    |s| Ok(Self::AsciiString(s)),
+                ),
+        }
+    }
+}
 
 /// An iterator over a GDS file that returns file that returns `(RecordHeader, <data>)`.
 pub struct RecordIter<'data> {
@@ -26,15 +92,20 @@ impl<'data> RecordIter<'data> {
 }
 
 impl<'data> Iterator for RecordIter<'data> {
-    type Item = (RecordHeader, &'data [u8]);
+    type Item = Record<'data>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match RecordHeader::try_ref_from_prefix(&self.input[self.offset..]) {
             Ok((header, rest)) => {
-                // Yield the length described in the header
-                let length = usize::from(header.length());
-                self.offset += usize::from(header.length());
-                Some((*header, &rest[..length - 4])) // Strip the 4 byte header from the body
+                let length = usize::from(header.length().get());
+                // Strip the 4 byte header from the body
+                let body_bytes = &rest[..length - 4];
+                let body = RecordBody::try_from((header.data_type(), body_bytes)).ok()?;
+                self.offset += length;
+                Some(Record {
+                    header: *header,
+                    body,
+                })
             }
             _ => None,
         }
@@ -59,15 +130,15 @@ mod tests {
 
         let mut iter = RecordIter::new(bytes);
 
-        let (hdr, body) = iter.next().expect("HEADER record");
-        assert_eq!(hdr.record_type(), RecordType::Header);
-        assert_eq!(hdr.data_type(), DataType::TwoByteSignedInt);
-        assert_eq!(body, &[0x00, 0x06]);
+        let record = iter.next().expect("Couldn't get record");
+        assert_eq!(record.header.record_type(), RecordType::Header);
+        assert_eq!(record.header.data_type(), DataType::TwoByteSignedInt);
+        assert_eq!(record.body, RecordBody::TwoByteSignedInt(&[0x06.into()]));
 
-        let (hdr, body) = iter.next().expect("ENDLIB record");
-        assert_eq!(hdr.record_type(), RecordType::EndLib);
-        assert_eq!(hdr.data_type(), DataType::NoData);
-        assert_eq!(body, &[]);
+        let record = iter.next().expect("Couldn't get record");
+        assert_eq!(record.header.record_type(), RecordType::EndLib);
+        assert_eq!(record.header.data_type(), DataType::NoData);
+        assert_eq!(record.body, RecordBody::NoData);
 
         assert!(iter.next().is_none());
     }
