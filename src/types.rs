@@ -1,5 +1,8 @@
 /*!
-GDSII types.
+GDSII "over-the-wire" type definitions according to the back-engineered spec of a random Dutch guy
+(my goat fr).
+
+## Invariants
 
 NOTE: Underlying byte stream is assumed to be **immutable**.
 
@@ -328,7 +331,10 @@ pub enum GdsVersion {
     /// version 7."
     V7 = 7,
 }
-/// GDSII Data Type (1 byte)
+
+/// GDSII Data Type (1 byte).
+///
+/// Merely a tag, does not carry associated data.
 #[repr(u8)]
 #[derive(
     Debug, PartialEq, Eq, Clone, Copy, IntoBytes, TryFromBytes, Unaligned, KnownLayout, Immutable,
@@ -351,7 +357,7 @@ pub enum DataType {
     ///
     /// The following are examples of two-byte integers:
     ///
-    /// ```
+    /// ```text
     /// 00000000 00000001 = 1
     /// 00000000 00000010 = 2
     /// 00000000 10001001 = 137
