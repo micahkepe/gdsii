@@ -8,6 +8,7 @@ description = "GDSII Rust toolkit library."
 exclude = ["./tests/"]
 
 [dependencies]
+serde = "1.0.228"
 thiserror = "2.0.18"
 zerocopy = { version  = "0.8.48", features = ["derive"]}
 zerocopy-derive = "0.8.48"
@@ -17,3 +18,7 @@ zerocopy-derive = "0.8.48"
 all = { level = "warn" }
 pedantic = { level = "warn" }
 nursery = { level = "warn" }
+
+[dev-dependencies]
+quickcheck = "1.1.0"
+quickcheck_macros = "1.2.0"

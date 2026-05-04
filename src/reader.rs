@@ -7,7 +7,10 @@ use zerocopy::{
     big_endian::{I16, I32, U16},
 };
 
-use crate::types::{DataType, RecordHeader};
+use crate::{
+    float::{GdsEightByteReal, GdsFourByteReal},
+    types::{DataType, RecordHeader},
+};
 
 /// Parsed GDS record, including its header and associated data.
 pub struct Record<'data> {
@@ -22,16 +25,16 @@ pub enum RecordBody<'data> {
     TwoByteSignedInt(&'data [I16]),
     FourByteSignedInt(&'data [I32]),
     /// NOTE: raw bytes here because needs custom conversion to `f32`.
-    FourByteReal(&'data [[u8; 4]]),
+    FourByteReal(&'data [GdsFourByteReal]),
     /// NOTE: raw bytes here because needs custom conversion to `f64`.
-    EightByteReal(&'data [[u8; 8]]),
+    EightByteReal(&'data [GdsEightByteReal]),
     AsciiString(&'data str),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum BodyParseError {
-    #[error("data does not match the expected datatype")]
-    Invalid,
+    #[error("data does not match the expected datatype: expected {expected:?}, found: {found:?}")]
+    Invalid { expected: DataType, found: Vec<u8> },
 }
 
 impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
@@ -43,27 +46,47 @@ impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
             DataType::BitArray => <[U16]>::try_ref_from_bytes(body)
                 .ok()
                 .map(Self::BitArray)
-                .ok_or(BodyParseError::Invalid),
+                .ok_or_else(|| BodyParseError::Invalid {
+                    expected: DataType::BitArray,
+                    found: body.to_vec(),
+                }),
             DataType::TwoByteSignedInt => <[I16]>::try_ref_from_bytes(body)
                 .ok()
                 .map(Self::TwoByteSignedInt)
-                .ok_or(BodyParseError::Invalid),
+                .ok_or_else(|| BodyParseError::Invalid {
+                    expected: DataType::TwoByteSignedInt,
+                    found: body.to_vec(),
+                }),
             DataType::FourByteSignedInt => <[I32]>::try_ref_from_bytes(body)
                 .ok()
                 .map(Self::FourByteSignedInt)
-                .ok_or(BodyParseError::Invalid),
-            DataType::FourByteReal => <[[u8; 4]]>::try_ref_from_bytes(body)
+                .ok_or_else(|| BodyParseError::Invalid {
+                    expected: DataType::FourByteSignedInt,
+                    found: body.to_vec(),
+                }),
+            DataType::FourByteReal => <[GdsFourByteReal]>::try_ref_from_bytes(body)
                 .ok()
                 .map(Self::FourByteReal)
-                .ok_or(BodyParseError::Invalid),
-            DataType::EightByteReal => <[[u8; 8]]>::try_ref_from_bytes(body)
+                .ok_or_else(|| BodyParseError::Invalid {
+                    expected: DataType::FourByteReal,
+                    found: body.to_vec(),
+                }),
+            DataType::EightByteReal => <[GdsEightByteReal]>::try_ref_from_bytes(body)
                 .ok()
                 .map(Self::EightByteReal)
-                .ok_or(BodyParseError::Invalid),
+                .ok_or_else(|| BodyParseError::Invalid {
+                    expected: DataType::EightByteReal,
+                    found: body.to_vec(),
+                }),
             DataType::AsciiString => std::str::from_utf8(body)
                 .map(|s| s.trim_end_matches('\0'))
                 .map_or_else(
-                    |_| Err(BodyParseError::Invalid),
+                    |_| {
+                        Err(BodyParseError::Invalid {
+                            expected: DataType::AsciiString,
+                            found: body.to_vec(),
+                        })
+                    },
                     |s| Ok(Self::AsciiString(s)),
                 ),
         }
