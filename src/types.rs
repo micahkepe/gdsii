@@ -10,7 +10,7 @@ NOTE: Underlying byte stream is assumed to be **immutable**.
  * [GDSII format](https://boolean.klaasholwerda.nl/interface/bnf/gdsformat.html)
  * [All About Calma's GDSII Stream Format](https://www.artwork.com/gdsii/gdsii/index.htm)
 */
-use zerocopy::big_endian::U16;
+use zerocopy::big_endian::{I32, U16};
 use zerocopy_derive::{
     Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned,
 };
@@ -543,5 +543,31 @@ impl RecordHeader {
     #[must_use]
     pub const fn data_type(&self) -> DataType {
         self.data_type
+    }
+}
+
+/// Coordinate pair in database units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GdsPoint {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl GdsPoint {
+    /// Creates a new point.
+    #[must_use]
+    pub const fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+
+    /// Iterates over a raw XY coordinate slice as typed points.
+    ///
+    /// GDS XY records store coordinates as a flat sequence of big-endian i32 values: `[x0, y0, x1,
+    /// y1, ...]`. This method yields one `GdsPoint` per pair. If the slice has an odd length, the
+    /// trailing value is ignored.
+    #[must_use]
+    pub fn iter_xy(xy: &[I32]) -> impl ExactSizeIterator<Item = Self> + '_ {
+        xy.chunks_exact(2)
+            .map(|pair| Self { x: pair[0].get(), y: pair[1].get() })
     }
 }
