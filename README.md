@@ -6,6 +6,6 @@ An efficient, zero-copy GDSII Rust toolkit library.
 
 - [x] Over-the-wire type definitions
 - [x] Record `Iterator`
-- [ ] Lossless "real" float roundtrips (currently lossy)
+- [x] Lossless "real" float roundtrips
 - [ ] Parser into GDS AST
 - [ ] GDS writer

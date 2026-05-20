@@ -1,6 +1,5 @@
 /*!
-GDSII "over-the-wire" type definitions according to the back-engineered spec of a random Dutch guy
-(my goat fr).
+GDSII "over-the-wire" type definitions.
 
 ## Invariants
 
@@ -9,6 +8,7 @@ NOTE: Underlying byte stream is assumed to be **immutable**.
 ## Reference
  * Original manual: <https://www.bitsavers.org/pdf/calma/GDS_II_Users_Operating_Manual_Nov78.pdf>
  * [GDSII format](https://boolean.klaasholwerda.nl/interface/bnf/gdsformat.html)
+ * [All About Calma's GDSII Stream Format](https://www.artwork.com/gdsii/gdsii/index.htm)
 */
 use zerocopy::big_endian::U16;
 use zerocopy_derive::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};

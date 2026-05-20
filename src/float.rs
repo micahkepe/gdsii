@@ -1,7 +1,7 @@
 //! GDSII floating-point type definitions.
 //!
-//! NOTE: GDSII predates [IEEE 754] Standard for Floating-Point Arithmetic because it's super old.
-//! It uses a custom floating point definition that requires specialized parsing.
+//! NOTE: GDSII predates [IEEE 754] Standard for Floating-Point Arithmetic and instead uses a
+//! custom floating point definition that requires specialized parsing.
 //!
 //! ## Structure
 //!
@@ -47,16 +47,11 @@ impl From<GdsFourByteReal> for f64 {
         if bytes == [0u8; 4] {
             return 0.0;
         }
-        let sign = if bytes[0] & 0x80 != 0 {
-            -1.0f64
-        } else {
-            1.0f64
-        };
+        let sign: Self = if bytes[0] & 0x80 != 0 { -1.0 } else { 1.0 };
         let exp = i32::from(bytes[0] & 0x7F) - 64;
         let mantissa_int =
             u32::from(bytes[1]) << 16 | u32::from(bytes[2]) << 8 | u32::from(bytes[3]);
-        let mantissa = Self::from(mantissa_int) / Self::from(1u32 << 24);
-        sign * mantissa * 16f64.powi(exp)
+        sign * Self::from(mantissa_int) * 2f64.powi(4 * exp - 24)
     }
 }
 
@@ -71,19 +66,17 @@ impl TryFrom<f64> for GdsFourByteReal {
             return Ok(Self([0u8; 4]));
         }
 
-        let ParsedRealComponents {
+        let GdsRealComponents {
             sign,
             exponent,
             mantissa,
-        } = encode_components(value)?;
+        } = encode_real_components(value, 24)?;
 
-        // mantissa \in [1/16, 1) so mantissa × 2^24 \in [2^20, 2^24) -> fits in u32, non-negative.
         #[expect(
             clippy::cast_possible_truncation,
-            reason = "mantissa × 2^24 is in [2^20, 2^24), fits in u32"
+            reason = "mantissa is in [2^20, 2^24), fits in u32"
         )]
-        #[expect(clippy::cast_sign_loss, reason = "mantissa is always positive")]
-        let m = (mantissa * f64::from(1u32 << 24)) as u32;
+        let m = mantissa as u32;
         Ok(Self([
             sign | exponent,
             ((m >> 16) & 0xFF) as u8,
@@ -110,11 +103,7 @@ impl From<GdsEightByteReal> for f64 {
         if bytes == [0u8; 8] {
             return 0.0;
         }
-        let sign = if bytes[0] & 0x80 != 0 {
-            -1.0f64
-        } else {
-            1.0f64
-        };
+        let sign: Self = if bytes[0] & 0x80 != 0 { -1.0 } else { 1.0 };
         let exp = i32::from(bytes[0] & 0x7F) - 64;
         let mantissa_int = u64::from(bytes[1]) << 48
             | u64::from(bytes[2]) << 40
@@ -125,10 +114,12 @@ impl From<GdsEightByteReal> for f64 {
             | u64::from(bytes[7]);
         #[expect(
             clippy::cast_precision_loss,
-            reason = "Precision loss here is bounded: 56-bit mantissa into f64's 52-bit mantissa loses at most 4 bits, giving relative error < 2^-53 < f64::EPSILON."
+            reason = "56-bit mantissa → f64's 53-bit significand loses at most 3 bits. \
+                      For values that originated from f64 encoding, the bottom bits are \
+                      zero padding so this cast is exact."
         )]
-        let mantissa = mantissa_int as Self / (1u64 << 56) as Self;
-        sign * mantissa * 16f64.powi(exp)
+        let mantissa = mantissa_int as Self;
+        sign * mantissa * 2f64.powi(4 * exp - 56)
     }
 }
 
@@ -143,90 +134,108 @@ impl TryFrom<f64> for GdsEightByteReal {
             return Ok(Self([0u8; 8]));
         }
 
-        let ParsedRealComponents {
+        let GdsRealComponents {
             sign,
             exponent,
             mantissa,
-        } = encode_components(value)?;
+        } = encode_real_components(value, 56)?;
 
-        // mantissa \in [1/16, 1) so mantissa × 2^56 \in [2^52, 2^56) -> fits in u64, non-negative.
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "1u64 << 56 is a power of 2, exactly representable as f64"
-        )]
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "mantissa × 2^56 is in [2^52, 2^56), fits in u64"
-        )]
-        #[expect(clippy::cast_sign_loss, reason = "mantissa is always positive")]
-        let m = (mantissa * (1u64 << 56) as f64) as u64;
         Ok(Self([
             sign | exponent,
-            ((m >> 48) & 0xFF) as u8,
-            ((m >> 40) & 0xFF) as u8,
-            ((m >> 32) & 0xFF) as u8,
-            ((m >> 24) & 0xFF) as u8,
-            ((m >> 16) & 0xFF) as u8,
-            ((m >> 8) & 0xFF) as u8,
-            (m & 0xFF) as u8,
+            ((mantissa >> 48) & 0xFF) as u8,
+            ((mantissa >> 40) & 0xFF) as u8,
+            ((mantissa >> 32) & 0xFF) as u8,
+            ((mantissa >> 24) & 0xFF) as u8,
+            ((mantissa >> 16) & 0xFF) as u8,
+            ((mantissa >> 8) & 0xFF) as u8,
+            (mantissa & 0xFF) as u8,
         ]))
     }
 }
 
+// ==============================================================================
+// Encoding via IEEE 754 bit extraction
+// ==============================================================================
+
 #[derive(Debug)]
-struct ParsedRealComponents {
+struct GdsRealComponents {
     sign: u8,
     exponent: u8,
-    mantissa: f64,
+    mantissa: u64,
 }
 
-/// Compute GDSII excess-64 encoding components for a non-zero finite `f64`.
+/// Encode a non-zero finite `f64` into GDS real components using exact integer arithmetic.
 ///
-/// Caller must ensure `value` is non-zero and finite.
-fn encode_components(value: f64) -> Result<ParsedRealComponents, NotRepresentable> {
+/// Operates directly on the IEEE 754 bit representation to avoid all floating-point rounding
+/// in the conversion. For 8-byte (`mantissa_bits` = 56), the encoding is lossless: GDS has
+/// 56 mantissa bits vs f64's 53-bit significand, so every f64 value maps to a unique GDS
+/// encoding. For 4-byte (`mantissa_bits` = 24), the 53-bit significand is rounded to 24 bits
+/// using round-to-nearest-even.
+fn encode_real_components(
+    value: f64,
+    mantissa_bits: u32,
+) -> Result<GdsRealComponents, NotRepresentable> {
     debug_assert!(value.is_finite() && value != 0.0);
+    debug_assert!(mantissa_bits == 24 || mantissa_bits == 56);
 
-    let sign = if value.is_sign_negative() { 0x80 } else { 0x00 };
-    let abs = value.abs();
+    let bits = value.to_bits();
+    let sign = if bits >> 63 != 0 { 0x80u8 } else { 0x00u8 };
+    let biased_exp = ((bits >> 52) & 0x7FF) as i32;
+    let frac = bits & 0x000F_FFFF_FFFF_FFFF;
 
-    // Find the base-16 exponent: smallest exp such that abs / 16^exp \in [1/16, 1).
-    // log2(abs) / 4 gives log16(abs); floor + 1 gives the ceiling.
-    // For finite non-zero f64, log2/4 is in ~[-255, 255], well within i32.
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "log16 of finite non-zero f64 is in [-255, 255], always fits in i32"
-    )]
-    let Some(mut exp) = ((abs.log2() / 4.0).floor() as i32).checked_add(1) else {
-        return Err(NotRepresentable);
+    // Extract the integer significand and its true binary exponent such that
+    // |value| = sig × 2^e2 exactly.
+    let (sig, e2) = if biased_exp == 0 {
+        // Subnormal: no implicit leading 1.
+        (frac, -1074_i32)
+    } else {
+        ((1u64 << 52) | frac, biased_exp - 1023 - 52)
     };
 
-    let mut mantissa = abs / 16_f64.powi(exp);
+    let mb = mantissa_bits.cast_signed();
+    let sb = (64 - sig.leading_zeros()).cast_signed();
 
-    // Correct for floating-point imprecision at normalization boundaries.
-    // Bounded: at most 1 iteration each (log16 estimate is off by at most 1 ULP).
-    #[expect(
-        clippy::while_float,
-        reason = "bounded normalization loop, at most 1 iteration"
-    )]
-    while mantissa >= 1.0 {
-        exp += 1;
-        mantissa /= 16.0;
-    }
-    while mantissa > 0.0 && mantissa < 1.0 / 16.0 {
-        exp -= 1;
-        mantissa *= 16.0;
+    // We need a GDS mantissa M in [2^(mb-4), 2^mb) and integer exponent E such that
+    //   M × 2^(4E - mb) = sig × 2^e2
+    // i.e. M = sig × 2^shift where shift = e2 + mb - 4E.
+    //
+    // For sig's MSB at bit (sb-1), after shifting the MSB lands at (sb-1+shift).
+    // We need that in [mb-4, mb-1], giving shift ∈ [mb-sb-3, mb-sb].
+    // Exactly one value in that 4-element range makes (e2 + mb - shift) divisible by 4.
+    let min_shift = mb - sb - 3;
+    let base = e2 + sb + 3;
+    let extra = base.rem_euclid(4);
+    let shift = min_shift + extra;
+    let mut gds_exp = (e2 + mb - shift) / 4;
+
+    let mut m = if shift >= 0 {
+        sig << shift.cast_unsigned()
+    } else {
+        let right_shift = (-shift).cast_unsigned();
+        let truncated = sig >> right_shift;
+        let remainder = sig & ((1u64 << right_shift) - 1);
+        let half = 1u64 << (right_shift - 1);
+        if remainder > half || (remainder == half && truncated & 1 != 0) {
+            truncated + 1
+        } else {
+            truncated
+        }
+    };
+
+    // Rounding can push M to exactly 2^mb, requiring renormalization.
+    if m >= (1u64 << mantissa_bits) {
+        m >>= 4;
+        gds_exp += 1;
     }
 
-    // 7-bit excess-64 field encodes actual exponents in [-64, 63].
-    if !(-64..=63).contains(&exp) {
+    if !(-64..=63).contains(&gds_exp) {
         return Err(NotRepresentable);
     }
 
-    Ok(ParsedRealComponents {
+    Ok(GdsRealComponents {
         sign,
-        // exp + 64 is in [0, 127] by the bounds check above.
-        exponent: u8::try_from(exp + 64).expect("exp + 64 is in [0, 127]"),
-        mantissa,
+        exponent: u8::try_from(gds_exp + 64).expect("gds_exp + 64 is in [0, 127]"),
+        mantissa: m,
     })
 }
 
@@ -263,15 +272,12 @@ mod tests {
     }
 
     #[test]
+    #[expect(clippy::float_cmp, reason = "8-byte roundtrip is exact by construction")]
     fn encode_decode_eight_byte_round_trip_manual() {
         for &x in &[1.0f64, -1.0, 0.5, 1.5, 0.1, 1e10, -1e-10, 42.0] {
             let encoded = GdsEightByteReal::try_from(x).expect("should encode");
             let decoded = f64::from(encoded);
-            let rel_err = (decoded - x).abs() / x.abs();
-            assert!(
-                rel_err < 1e-14,
-                "round-trip failed for {x}: got {decoded}, rel_err={rel_err}"
-            );
+            assert_eq!(decoded, x, "round-trip not exact for {x}");
         }
     }
 
@@ -297,6 +303,7 @@ mod tests {
         assert!(GdsFourByteReal::try_from(f64::INFINITY).is_err());
     }
 
+    #[expect(clippy::float_cmp, reason = "8-byte roundtrip is exact by construction")]
     #[quickcheck]
     fn qc_eight_byte_round_trip(x: f64) -> bool {
         if !x.is_finite() {
@@ -306,10 +313,7 @@ mod tests {
             let r = GdsEightByteReal::try_from(x).expect("zero encodes");
             return f64::from(r) == 0.0;
         }
-        GdsEightByteReal::try_from(x).map_or(true, |r| {
-            let decoded = f64::from(r);
-            (decoded - x).abs() / x.abs() < 1e-13
-        })
+        GdsEightByteReal::try_from(x).map_or(true, |r| f64::from(r) == x)
     }
 
     #[quickcheck]
