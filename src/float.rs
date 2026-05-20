@@ -1,7 +1,7 @@
 //! GDSII floating-point type definitions.
 //!
-//! NOTE: GDSII predates [IEEE 754] Standard for Floating-Point Arithmetic and instead uses a
-//! custom floating point definition that requires specialized parsing.
+//! > **NOTE**: GDSII predates [IEEE 754] Standard for Floating-Point Arithmetic and instead uses a
+//! > custom floating point definition that requires specialized parsing.
 //!
 //! ## Structure
 //!
@@ -26,12 +26,16 @@
 
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
+/// Unrepresentable GDSII "real" type error.
 #[derive(Debug, thiserror::Error)]
 #[error("value is not representable as a GDSII real (NaN, Inf, or out of range)")]
 pub struct NotRepresentable;
 
+/// GDSII 4-byte "real" float.
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned,
+)]
 pub struct GdsFourByteReal([u8; 4]);
 
 impl GdsFourByteReal {
@@ -86,8 +90,11 @@ impl TryFrom<f64> for GdsFourByteReal {
     }
 }
 
+/// GDSII 8-byte "real" float.
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned,
+)]
 pub struct GdsEightByteReal([u8; 8]);
 
 impl GdsEightByteReal {
@@ -272,7 +279,10 @@ mod tests {
     }
 
     #[test]
-    #[expect(clippy::float_cmp, reason = "8-byte roundtrip is exact by construction")]
+    #[expect(
+        clippy::float_cmp,
+        reason = "8-byte roundtrip is exact by construction"
+    )]
     fn encode_decode_eight_byte_round_trip_manual() {
         for &x in &[1.0f64, -1.0, 0.5, 1.5, 0.1, 1e10, -1e-10, 42.0] {
             let encoded = GdsEightByteReal::try_from(x).expect("should encode");
@@ -303,7 +313,10 @@ mod tests {
         assert!(GdsFourByteReal::try_from(f64::INFINITY).is_err());
     }
 
-    #[expect(clippy::float_cmp, reason = "8-byte roundtrip is exact by construction")]
+    #[expect(
+        clippy::float_cmp,
+        reason = "8-byte roundtrip is exact by construction"
+    )]
     #[quickcheck]
     fn qc_eight_byte_round_trip(x: f64) -> bool {
         if !x.is_finite() {

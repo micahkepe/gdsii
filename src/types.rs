@@ -389,8 +389,7 @@ pub enum DataType {
     FourByteSignedInt = 0x03,
     /// 4-byte real = 2-word floating point representation (See `EightByteReal`).
     ///
-    /// NOTE: this is not used in practice.
-    #[allow(dead_code, reason = "This data type is not used in practice")]
+    /// NOTE: this is **not** used in practice.
     FourByteReal = 0x04,
     /// 8-byte real = 4-word floating point representation
     ///

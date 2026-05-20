@@ -4,5 +4,6 @@
 //!
 //! [GDSII]: <https://en.wikipedia.org/wiki/GDSII>
 pub mod float;
+pub mod parser;
 pub mod reader;
 pub mod types;

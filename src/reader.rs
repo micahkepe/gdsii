@@ -13,6 +13,7 @@ use crate::{
 };
 
 /// Parsed GDS record, including its header and associated data.
+#[derive(Debug)]
 pub struct Record<'data> {
     pub header: RecordHeader,
     pub body: RecordBody<'data>,
@@ -93,7 +94,8 @@ impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
     }
 }
 
-/// An iterator over a GDS file that returns file that returns `(RecordHeader, <data>)`.
+/// An iterator over a GDS file that yields parsed records.
+#[derive(Debug)]
 pub struct RecordIter<'data> {
     /// Reference to the source GDS bytes.
     input: &'data [u8],
