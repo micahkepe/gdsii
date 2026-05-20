@@ -115,7 +115,7 @@ impl<'data> RecordIter<'data> {
 }
 
 impl<'data> Iterator for RecordIter<'data> {
-    type Item = Record<'data>;
+    type Item = Result<Record<'data>, BodyParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match RecordHeader::try_ref_from_prefix(&self.input[self.offset..]) {
@@ -123,12 +123,15 @@ impl<'data> Iterator for RecordIter<'data> {
                 let length = usize::from(header.length().get());
                 // Strip the 4 byte header from the body
                 let body_bytes = &rest[..length - 4];
-                let body = RecordBody::try_from((header.data_type(), body_bytes)).ok()?;
+                let body = match RecordBody::try_from((header.data_type(), body_bytes)) {
+                    Ok(body) => body,
+                    Err(e) => return Some(Err(e)),
+                };
                 self.offset += length;
-                Some(Record {
+                Some(Ok(Record {
                     header: *header,
                     body,
-                })
+                }))
             }
             _ => None,
         }
@@ -153,12 +156,12 @@ mod tests {
 
         let mut iter = RecordIter::new(bytes);
 
-        let record = iter.next().expect("Couldn't get record");
+        let record = iter.next().expect("Couldn't get record").expect("body parse failed");
         assert_eq!(record.header.record_type(), RecordType::Header);
         assert_eq!(record.header.data_type(), DataType::TwoByteSignedInt);
         assert_eq!(record.body, RecordBody::TwoByteSignedInt(&[0x06.into()]));
 
-        let record = iter.next().expect("Couldn't get record");
+        let record = iter.next().expect("Couldn't get record").expect("body parse failed");
         assert_eq!(record.header.record_type(), RecordType::EndLib);
         assert_eq!(record.header.data_type(), DataType::NoData);
         assert_eq!(record.body, RecordBody::NoData);
