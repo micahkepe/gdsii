@@ -11,7 +11,9 @@ NOTE: Underlying byte stream is assumed to be **immutable**.
  * [All About Calma's GDSII Stream Format](https://www.artwork.com/gdsii/gdsii/index.htm)
 */
 use zerocopy::big_endian::U16;
-use zerocopy_derive::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
+use zerocopy_derive::{
+    Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned,
+};
 
 /// GDSII Record Type (1 byte).
 ///
@@ -23,7 +25,17 @@ use zerocopy_derive::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned
 /// are unreleased or unused: STYPTABLE (0x25), STRTYPE (0x25), ELKEY (0x27), LINKTYPE (0x28),
 /// LINKKEYS (0x29), STRCLASS (0x34), RESERVED (0x35).
 #[repr(u8)]
-#[derive(Debug, PartialEq, Eq, Clone, Copy, IntoBytes, TryFromBytes, Unaligned, Immutable)]
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    IntoBytes,
+    TryFromBytes,
+    Unaligned,
+    Immutable,
+)]
 pub enum RecordType {
     /// Contains two bytes of data representing the Stream version number.
     Header = 0x00,
@@ -337,7 +349,16 @@ pub enum GdsVersion {
 /// Merely a tag, does not carry associated data.
 #[repr(u8)]
 #[derive(
-    Debug, PartialEq, Eq, Clone, Copy, IntoBytes, TryFromBytes, Unaligned, KnownLayout, Immutable,
+    Debug,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    IntoBytes,
+    TryFromBytes,
+    Unaligned,
+    KnownLayout,
+    Immutable,
 )]
 pub enum DataType {
     NoData = 0x00,
@@ -478,7 +499,16 @@ pub enum DataType {
 /// within the record. The fifth until count bytes of a record contain the data.
 #[repr(C)]
 #[derive(
-    TryFromBytes, PartialEq, Eq, IntoBytes, Debug, Unaligned, KnownLayout, Immutable, Copy, Clone,
+    TryFromBytes,
+    PartialEq,
+    Eq,
+    IntoBytes,
+    Debug,
+    Unaligned,
+    KnownLayout,
+    Immutable,
+    Copy,
+    Clone,
 )]
 pub struct RecordHeader {
     /// Count (in eight-bit bytes) of the total record length, so the maximum length is 65536
@@ -492,12 +522,12 @@ pub struct RecordHeader {
 
 impl RecordHeader {
     #[must_use]
-    pub const fn new(length: U16, record_type: RecordType, data_type: DataType) -> Self {
-        Self {
-            length,
-            record_type,
-            data_type,
-        }
+    pub const fn new(
+        length: U16,
+        record_type: RecordType,
+        data_type: DataType,
+    ) -> Self {
+        Self { length, record_type, data_type }
     }
 
     #[must_use]

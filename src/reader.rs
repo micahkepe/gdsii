@@ -34,14 +34,18 @@ pub enum RecordBody<'data> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum BodyParseError {
-    #[error("data does not match the expected datatype: expected {expected:?}, found: {found:?}")]
+    #[error(
+        "data does not match the expected datatype: expected {expected:?}, found: {found:?}"
+    )]
     Invalid { expected: DataType, found: Vec<u8> },
 }
 
 impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
     type Error = BodyParseError;
 
-    fn try_from((data_type, body): (DataType, &'data [u8])) -> Result<Self, Self::Error> {
+    fn try_from(
+        (data_type, body): (DataType, &'data [u8]),
+    ) -> Result<Self, Self::Error> {
         match data_type {
             DataType::NoData => Ok(Self::NoData),
             DataType::BitArray => <[U16]>::try_ref_from_bytes(body)
@@ -65,20 +69,24 @@ impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
                     expected: DataType::FourByteSignedInt,
                     found: body.to_vec(),
                 }),
-            DataType::FourByteReal => <[GdsFourByteReal]>::try_ref_from_bytes(body)
-                .ok()
-                .map(Self::FourByteReal)
-                .ok_or_else(|| BodyParseError::Invalid {
-                    expected: DataType::FourByteReal,
-                    found: body.to_vec(),
-                }),
-            DataType::EightByteReal => <[GdsEightByteReal]>::try_ref_from_bytes(body)
-                .ok()
-                .map(Self::EightByteReal)
-                .ok_or_else(|| BodyParseError::Invalid {
-                    expected: DataType::EightByteReal,
-                    found: body.to_vec(),
-                }),
+            DataType::FourByteReal => {
+                <[GdsFourByteReal]>::try_ref_from_bytes(body)
+                    .ok()
+                    .map(Self::FourByteReal)
+                    .ok_or_else(|| BodyParseError::Invalid {
+                        expected: DataType::FourByteReal,
+                        found: body.to_vec(),
+                    })
+            }
+            DataType::EightByteReal => {
+                <[GdsEightByteReal]>::try_ref_from_bytes(body)
+                    .ok()
+                    .map(Self::EightByteReal)
+                    .ok_or_else(|| BodyParseError::Invalid {
+                        expected: DataType::EightByteReal,
+                        found: body.to_vec(),
+                    })
+            }
             DataType::AsciiString => std::str::from_utf8(body)
                 .map(|s| s.trim_end_matches('\0'))
                 .map_or_else(
@@ -109,10 +117,7 @@ impl<'data> RecordIter<'data> {
     where
         B: AsRef<[u8]> + ?Sized,
     {
-        Self {
-            input: input.as_ref(),
-            offset: 0,
-        }
+        Self { input: input.as_ref(), offset: 0 }
     }
 }
 
@@ -125,15 +130,15 @@ impl<'data> Iterator for RecordIter<'data> {
                 let length = usize::from(header.length().get());
                 // Strip the 4 byte header from the body
                 let body_bytes = &rest[..length - 4];
-                let body = match RecordBody::try_from((header.data_type(), body_bytes)) {
+                let body = match RecordBody::try_from((
+                    header.data_type(),
+                    body_bytes,
+                )) {
                     Ok(body) => body,
                     Err(e) => return Some(Err(e)),
                 };
                 self.offset += length;
-                Some(Ok(Record {
-                    header: *header,
-                    body,
-                }))
+                Some(Ok(Record { header: *header, body }))
             }
             _ => None,
         }
@@ -151,19 +156,27 @@ mod tests {
         // HEADER: 6 bytes total (4 header + 2 body), version = 6
         // ENDLIB: 4 bytes total (header only, no body)
         let bytes: &[u8] = &[
-            0x00, 0x06, 0x00, 0x02, // HEADER: length=6, type=0x00, datatype=0x02
+            0x00, 0x06, 0x00,
+            0x02, // HEADER: length=6, type=0x00, datatype=0x02
             0x00, 0x06, // body: version 6
-            0x00, 0x04, 0x04, 0x00, // ENDLIB: length=4, type=0x04, datatype=0x00
+            0x00, 0x04, 0x04,
+            0x00, // ENDLIB: length=4, type=0x04, datatype=0x00
         ];
 
         let mut iter = RecordIter::new(bytes);
 
-        let record = iter.next().expect("Couldn't get record").expect("body parse failed");
+        let record = iter
+            .next()
+            .expect("Couldn't get record")
+            .expect("body parse failed");
         assert_eq!(record.header.record_type(), RecordType::Header);
         assert_eq!(record.header.data_type(), DataType::TwoByteSignedInt);
         assert_eq!(record.body, RecordBody::TwoByteSignedInt(&[0x06.into()]));
 
-        let record = iter.next().expect("Couldn't get record").expect("body parse failed");
+        let record = iter
+            .next()
+            .expect("Couldn't get record")
+            .expect("body parse failed");
         assert_eq!(record.header.record_type(), RecordType::EndLib);
         assert_eq!(record.header.data_type(), DataType::NoData);
         assert_eq!(record.body, RecordBody::NoData);

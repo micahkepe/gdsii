@@ -28,13 +28,24 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 /// Unrepresentable GDSII "real" type error.
 #[derive(Debug, thiserror::Error)]
-#[error("value is not representable as a GDSII real (NaN, Inf, or out of range)")]
+#[error(
+    "value is not representable as a GDSII real (NaN, Inf, or out of range)"
+)]
 pub struct NotRepresentable;
 
 /// GDSII 4-byte "real" float.
 #[repr(transparent)]
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    FromBytes,
+    IntoBytes,
+    KnownLayout,
+    Immutable,
+    Unaligned,
 )]
 pub struct GdsFourByteReal([u8; 4]);
 
@@ -53,8 +64,9 @@ impl From<GdsFourByteReal> for f64 {
         }
         let sign: Self = if bytes[0] & 0x80 != 0 { -1.0 } else { 1.0 };
         let exp = i32::from(bytes[0] & 0x7F) - 64;
-        let mantissa_int =
-            u32::from(bytes[1]) << 16 | u32::from(bytes[2]) << 8 | u32::from(bytes[3]);
+        let mantissa_int = u32::from(bytes[1]) << 16
+            | u32::from(bytes[2]) << 8
+            | u32::from(bytes[3]);
         sign * Self::from(mantissa_int) * 2f64.powi(4 * exp - 24)
     }
 }
@@ -70,11 +82,8 @@ impl TryFrom<f64> for GdsFourByteReal {
             return Ok(Self([0u8; 4]));
         }
 
-        let GdsRealComponents {
-            sign,
-            exponent,
-            mantissa,
-        } = encode_real_components(value, 24)?;
+        let GdsRealComponents { sign, exponent, mantissa } =
+            encode_real_components(value, 24)?;
 
         #[expect(
             clippy::cast_possible_truncation,
@@ -93,7 +102,16 @@ impl TryFrom<f64> for GdsFourByteReal {
 /// GDSII 8-byte "real" float.
 #[repr(transparent)]
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    FromBytes,
+    IntoBytes,
+    KnownLayout,
+    Immutable,
+    Unaligned,
 )]
 pub struct GdsEightByteReal([u8; 8]);
 
@@ -141,11 +159,8 @@ impl TryFrom<f64> for GdsEightByteReal {
             return Ok(Self([0u8; 8]));
         }
 
-        let GdsRealComponents {
-            sign,
-            exponent,
-            mantissa,
-        } = encode_real_components(value, 56)?;
+        let GdsRealComponents { sign, exponent, mantissa } =
+            encode_real_components(value, 56)?;
 
         Ok(Self([
             sign | exponent,
@@ -241,7 +256,8 @@ fn encode_real_components(
 
     Ok(GdsRealComponents {
         sign,
-        exponent: u8::try_from(gds_exp + 64).expect("gds_exp + 64 is in [0, 127]"),
+        exponent: u8::try_from(gds_exp + 64)
+            .expect("gds_exp + 64 is in [0, 127]"),
         mantissa: m,
     })
 }
@@ -254,18 +270,23 @@ mod tests {
 
     #[test]
     fn eight_byte_real_zero() {
-        assert!((f64::from(GdsEightByteReal([0u8; 8])) - 0.0).abs() < f64::EPSILON);
+        assert!(
+            (f64::from(GdsEightByteReal([0u8; 8])) - 0.0).abs() < f64::EPSILON
+        );
     }
 
     #[test]
     fn four_byte_real_zero() {
-        assert!((f64::from(GdsFourByteReal([0u8; 4])) - 0.0).abs() < f64::EPSILON);
+        assert!(
+            (f64::from(GdsFourByteReal([0u8; 4])) - 0.0).abs() < f64::EPSILON
+        );
     }
 
     #[test]
     fn eight_byte_real_one() {
         // 1.0 = 0.0625 × 16^1 -> exponent byte = 64 + 1 = 0x41, mantissa = 0x10_0000_0000_0000
-        let r = GdsEightByteReal([0x41, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        let r =
+            GdsEightByteReal([0x41, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
         let v = f64::from(r);
         assert!((v - 1.0).abs() < 1e-15, "expected 1.0, got {v}");
     }
@@ -273,7 +294,8 @@ mod tests {
     #[test]
     fn eight_byte_real_negative_one() {
         // -1.0: sign bit set -> 0xC1 first byte
-        let r = GdsEightByteReal([0xC1, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        let r =
+            GdsEightByteReal([0xC1, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
         let v = f64::from(r);
         assert!((v + 1.0).abs() < 1e-15, "expected -1.0, got {v}");
     }
