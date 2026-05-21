@@ -6,6 +6,7 @@ edition = "2024"
 readme = "README.md"
 description = "GDSII Rust toolkit library."
 exclude = ["./tests/"]
+license = "MIT"
 
 [dependencies]
 serde = "1.0.228"
