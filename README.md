@@ -102,6 +102,9 @@ assert_eq!(out.len(), data.len());
 | `StructureEnd`   | End of current structure                                                       |
 | `LibraryEnd`     | End of library (final event)                                                   |
 
+See the [GDSII Bachus Nauer Form](https://boolean.klaasholwerda.nl/interface/bnf/gdsformat.html#bnfforms)
+for more information.
+
 ## License
 
 MIT - see [LICENSE.md](LICENSE.md).
