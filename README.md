@@ -104,4 +104,4 @@ assert_eq!(out.len(), data.len());
 
 ## License
 
-MIT
+MIT - see [LICENSE.md](LICENSE.md).
