@@ -3,7 +3,7 @@ GDSII "over-the-wire" type definitions.
 
 ## Invariants
 
-NOTE: Underlying byte stream is assumed to be **immutable**.
+**NOTE**: Underlying byte stream is assumed to be **immutable**.
 
 ## Reference
  * Original manual: <https://www.bitsavers.org/pdf/calma/GDS_II_Users_Operating_Manual_Nov78.pdf>
@@ -521,6 +521,7 @@ pub struct RecordHeader {
 }
 
 impl RecordHeader {
+    /// Constructs a new `RecordHeader` of the given length, record type, and data type.
     #[must_use]
     pub const fn new(
         length: U16,
@@ -530,16 +531,19 @@ impl RecordHeader {
         Self { length, record_type, data_type }
     }
 
+    /// Returns the length contained in the record header.
     #[must_use]
     pub const fn length(&self) -> U16 {
         self.length
     }
 
+    /// Returns the record type contained in the record header.
     #[must_use]
     pub const fn record_type(&self) -> RecordType {
         self.record_type
     }
 
+    /// Returns the data type contained in the record header.
     #[must_use]
     pub const fn data_type(&self) -> DataType {
         self.data_type
@@ -549,7 +553,9 @@ impl RecordHeader {
 /// Coordinate pair in database units.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GdsPoint {
+    /// The associated x coordinate of the GDS point.
     pub x: i32,
+    /// The associated y coordinate of the GDS point.
     pub y: i32,
 }
 
@@ -564,7 +570,7 @@ impl GdsPoint {
     ///
     /// GDS XY records store coordinates as a flat sequence of big-endian i32 values: `[x0, y0, x1,
     /// y1, ...]`. This method yields one `GdsPoint` per pair. If the slice has an odd length, the
-    /// trailing value is ignored.
+    /// **trailing value is ignored**.
     #[must_use]
     pub fn iter_xy(xy: &[I32]) -> impl ExactSizeIterator<Item = Self> + '_ {
         xy.chunks_exact(2)
