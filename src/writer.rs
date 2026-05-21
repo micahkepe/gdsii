@@ -41,8 +41,8 @@ fn write_record_header(
         reason = "GDS record bodies are always well under 64k"
     )]
     let length = (4 + body_len) as u16;
-    sink.write_all(&length.to_be_bytes())?;
-    sink.write_all(&[record_type as u8, data_type as u8])?;
+    let [a, b] = length.to_be_bytes();
+    sink.write_all(&[a, b, record_type as u8, data_type as u8])?;
     Ok(())
 }
 
@@ -110,9 +110,8 @@ fn write_i16_slice(
         DataType::TwoByteSignedInt,
         values.len() * 2,
     )?;
-    for v in values {
-        sink.write_all(&v.get().to_be_bytes())?;
-    }
+    // I16 is repr(transparent) big-endian (already in wire order).
+    sink.write_all(zerocopy::IntoBytes::as_bytes(values))?;
     Ok(())
 }
 
@@ -127,9 +126,8 @@ fn write_i32_slice(
         DataType::FourByteSignedInt,
         values.len() * 4,
     )?;
-    for v in values {
-        sink.write_all(&v.get().to_be_bytes())?;
-    }
+    // I32 is repr(transparent) big-endian (already in wire order).
+    sink.write_all(zerocopy::IntoBytes::as_bytes(values))?;
     Ok(())
 }
 
