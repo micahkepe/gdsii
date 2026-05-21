@@ -9,7 +9,6 @@ exclude = ["./tests/"]
 license = "MIT"
 
 [dependencies]
-serde = "1.0.228"
 thiserror = "2.0.18"
 zerocopy = { version  = "0.8.48", features = ["derive"]}
 zerocopy-derive = "0.8.48"
