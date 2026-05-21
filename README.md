@@ -8,4 +8,4 @@ An efficient, zero-copy GDSII Rust toolkit library.
 - [x] Record `Iterator`
 - [x] Lossless "real" float roundtrips
 - [x] Parser into GDS AST
-- [ ] GDS writer
+- [x] GDS writer
