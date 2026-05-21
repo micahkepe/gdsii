@@ -1,6 +1,13 @@
 # `gdsii`
 
-Fast, zero-copy, streaming GDSII parser and writer for Rust.
+<p align="center">
+<a href="https://crates.io/crates/gdsii"><img alt="Crates.io Version" src="https://img.shields.io/crates/v/gdsii"></a>
+<a href="https://docs.rs/gdsii"><img alt="docs.rs" src="https://img.shields.io/docsrs/gdsii"></a>
+<a href="https://github.com/micahkepe/gdsii/blob/main/LICENSE"><img alt="GitHub License" src="https://img.shields.io/github/license/micahkepe/gdsii"></a>
+<a href="https://github.com/micahkepe/gdsii/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/micahkepe/gdsii/rust.yml"></a>
+</p>
+
+**Fast, zero-copy, streaming GDSII parser and writer.**
 
 Parses [GDSII](https://en.wikipedia.org/wiki/GDSII) binary layout files into a
 [SAX](https://en.wikipedia.org/wiki/Simple_API_for_XML)-style event stream with
@@ -46,11 +53,13 @@ cargo run --release --example gen_large_gds -- bench_1gb.gds 1000
 
 Then:
 
-```fish
-for file in ./*.gds
-    ./target/release/examples/bench_parse "$file"
-    printf '\n%s\n\n' '---'
-end
+```bash
+cargo build --release --example bench_parse
+
+for f in bench_1mb.gds bench_30mb.gds bench_300mb.gds bench_1gb.gds; do
+  ./target/release/examples/bench_parse "$f"
+  printf '\n%s\n\n' '---'
+done
 ```
 
 ## Quick start
