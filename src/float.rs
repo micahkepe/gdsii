@@ -139,7 +139,7 @@ impl From<GdsEightByteReal> for f64 {
             | u64::from(bytes[7]);
         #[expect(
             clippy::cast_precision_loss,
-            reason = "56-bit mantissa → f64's 53-bit significand loses at most 3 bits. \
+            reason = "56-bit mantissa -> f64's 53-bit significand loses at most 3 bits. \
                       For values that originated from f64 encoding, the bottom bits are \
                       zero padding so this cast is exact."
         )]

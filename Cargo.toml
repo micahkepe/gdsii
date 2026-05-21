@@ -3,15 +3,17 @@ name = "gdsii"
 version = "0.1.0"
 authors = ["Micah Kepe <micahkepe@gmail.com>"]
 edition = "2024"
+description = "Fast, zero-copy, streaming GDSII parser and writer."
 readme = "README.md"
-description = "GDSII Rust toolkit library."
-exclude = ["./tests/"]
 license = "MIT"
+repository = "https://github.com/micahkepe/gdsii"
+homepage = "https://github.com/micahkepe/gdsii"
+keywords = ["gdsii", "gds", "eda", "layout", "parser"]
+exclude = ["tests/data/", "examples/"]
 
 [dependencies]
 thiserror = "2.0.18"
 zerocopy = { version  = "0.8.48", features = ["derive"]}
-zerocopy-derive = "0.8.48"
 
 [lints.clippy]
 # See: <https://rust-lang.github.io/rust-clippy/master/index.html>

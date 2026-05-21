@@ -264,10 +264,8 @@ dependencies = [
  "gds21",
  "quickcheck",
  "quickcheck_macros",
- "serde",
  "thiserror",
  "zerocopy",
- "zerocopy-derive",
 ]
 
 [[package]]

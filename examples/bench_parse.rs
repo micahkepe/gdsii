@@ -49,7 +49,7 @@ fn main() {
             .expect("gds21 parse error");
     }
     let gds21_elapsed = start.elapsed() / iterations.cast_unsigned();
-    eprintln!("gds21 parse:\t\t{gds21_elapsed:?}");
+    eprintln!("gds21 parse:\t\t\t{gds21_elapsed:?}");
 
     // gdsii: zero-copy streaming parse
     let start = Instant::now();
@@ -62,7 +62,7 @@ fn main() {
         }
     }
     let gdsii_elapsed = start.elapsed() / iterations.cast_unsigned();
-    eprintln!("gdsii parse:\t\t{gdsii_elapsed:?} ({event_count} events)");
+    eprintln!("gdsii parse:\t\t\t{gdsii_elapsed:?} ({event_count} events)");
 
     // gdsii: parse + write roundtrip
     let start = Instant::now();

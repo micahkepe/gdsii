@@ -1,7 +1,7 @@
 //! GDS binary writer — serializes [`GdsEvent`]s to GDSII byte streams.
 //!
-//! Symmetric with [`crate::parser::GdsParser`]: the parser reads bytes → events,
-//! the writer takes events → bytes. Together they enable streaming read-transform-write
+//! Symmetric with [`crate::parser::GdsParser`]: the parser reads bytes -> events,
+//! the writer takes events -> bytes. Together they enable streaming read-transform-write
 //! pipelines with no full-file buffering.
 
 use std::io::Write;

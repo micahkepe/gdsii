@@ -10,9 +10,9 @@ NOTE: Underlying byte stream is assumed to be **immutable**.
  * [GDSII format](https://boolean.klaasholwerda.nl/interface/bnf/gdsformat.html)
  * [All About Calma's GDSII Stream Format](https://www.artwork.com/gdsii/gdsii/index.htm)
 */
-use zerocopy::big_endian::{I32, U16};
-use zerocopy_derive::{
+use zerocopy::{
     Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned,
+    big_endian::{I32, U16},
 };
 
 /// GDSII Record Type (1 byte).

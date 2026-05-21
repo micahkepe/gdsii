@@ -1,0 +1,44 @@
+file: ./bench_1gb.gds (1572933088 bytes)
+
+gds21 parse:		2.968195416s
+gdsii parse:		818.39175ms (24577184 events)
+gdsii roundtrip:	1.484614139s
+
+speedup (parse):	3.6x
+gdsii throughput:	1922 MB/s
+
+---
+
+file: ./bench_1mb.gds (1640928 bytes)
+
+gds21 parse:		2.785675ms
+gdsii parse:		863.279µs (25744 events)
+gdsii roundtrip:	1.181325ms
+
+speedup (parse):	3.2x
+gdsii throughput:	1901 MB/s
+
+---
+
+file: ./bench_30mb.gds (47255008 bytes)
+
+gds21 parse:		87.776641ms
+gdsii parse:		24.5882ms (738464 events)
+gdsii roundtrip:	40.47172ms
+
+speedup (parse):	3.6x
+gdsii throughput:	1922 MB/s
+
+---
+
+file: ./bench_300mb.gds (471928288 bytes)
+
+gds21 parse:		868.163819ms
+gdsii parse:		245.229763ms (7373984 events)
+gdsii roundtrip:	359.712652ms
+
+speedup (parse):	3.5x
+gdsii throughput:	1924 MB/s
+
+---
+
