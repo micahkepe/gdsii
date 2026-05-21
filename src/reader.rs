@@ -19,6 +19,7 @@ pub struct Record<'data> {
     pub body: RecordBody<'data>,
 }
 
+/// Payload data contained within a `Record`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum RecordBody<'data> {
     NoData,
@@ -32,6 +33,7 @@ pub enum RecordBody<'data> {
     AsciiString(&'data str),
 }
 
+/// Error encountered while parsed GDS record body.
 #[derive(Debug, thiserror::Error)]
 pub enum BodyParseError {
     #[error(
@@ -112,6 +114,19 @@ pub struct RecordIter<'data> {
 }
 
 impl<'data> RecordIter<'data> {
+    /// Constructs a new iterator over the referenced GDS bytes.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use gdsii::reader::RecordIter;
+    ///
+    /// let data = std::fs::read("layout.gds").unwrap();
+    /// for record in RecordIter::new(&data) {
+    ///     let record = record.unwrap();
+    ///     println!("{:?}: {:?}", record.header.record_type(), record.header.data_type());
+    /// }
+    /// ```
     #[must_use]
     pub fn new<B>(input: &'data B) -> Self
     where

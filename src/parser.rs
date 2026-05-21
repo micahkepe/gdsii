@@ -54,43 +54,60 @@ pub enum GdsEvent<'data> {
 /// Library-level metadata from HEADER, BGNLIB, LIBNAME, and UNITS records.
 #[derive(Debug)]
 pub struct LibraryBegin<'data> {
+    /// Stream format version (typically 3, 4, 5, or 7).
     pub version: i16,
     /// Twelve i16 values: modification time then access time
     /// (year, month, day, hour, minute, second × 2).
     pub timestamps: &'data [I16],
+    /// Library name string.
     pub lib_name: &'data str,
+    /// Size of a database unit in user units (e.g. 0.001 for 1nm DB, 1um user).
     pub db_in_user: f64,
+    /// Size of a database unit in meters (e.g. 1e-9 for 1nm).
     pub db_in_meters: f64,
+    /// Reference library names (44 bytes each, up to 15).
     pub reflibs: Option<&'data str>,
+    /// Text font definition file names.
     pub fonts: Option<&'data str>,
+    /// Attribute definition file name.
     pub attrtable: Option<&'data str>,
+    /// Number of deleted/backup structure copies to retain (2--99).
     pub generations: Option<i16>,
 }
 
 /// Structure (cell) header from BGNSTR and STRNAME records.
 #[derive(Debug)]
 pub struct StructureBegin<'data> {
+    /// Twelve i16 timestamp values (same format as [`LibraryBegin::timestamps`]).
     pub timestamps: &'data [I16],
+    /// Structure name (up to 32 characters).
     pub name: &'data str,
 }
 
 /// PROPATTR/PROPVALUE pair attached to an element.
 #[derive(Debug)]
 pub struct Property<'data> {
+    /// Attribute number (1--127).
     pub attr: i16,
+    /// Attribute value string (up to 126 characters).
     pub value: &'data str,
 }
 
 /// Transformation flags from STRANS, MAG, and ANGLE records.
 ///
 /// MAG and ANGLE are stored as raw [`GdsEightByteReal`] to preserve the original
-/// encoding for byte-exact roundtrips. Use `f64::from(strans.mag)` to decode.
+/// encoding for byte-exact roundtrips. Use `f64::from(real)` to decode.
 #[derive(Debug, Clone, Copy)]
 pub struct Strans {
+    /// Reflect about the X-axis before rotation.
     pub reflection: bool,
+    /// Magnification is absolute (not affected by parent).
     pub abs_mag: bool,
+    /// Angle is absolute (not affected by parent).
     pub abs_angle: bool,
+    /// Magnification factor as raw GDS real. Decode with `f64::from(mag)`.
     pub mag: Option<GdsEightByteReal>,
+    /// Rotation angle in degrees (counterclockwise) as raw GDS real.
     pub angle: Option<GdsEightByteReal>,
 }
 
@@ -109,78 +126,122 @@ pub enum Element<'data> {
 /// Filled polygon element.
 #[derive(Debug)]
 pub struct Boundary<'data> {
+    /// Element flags (bit 14 = external data, bit 15 = template data).
     pub elflags: Option<u16>,
+    /// Plex group membership ID.
     pub plex: Option<i32>,
+    /// Layer number (0 - 255).
     pub layer: i16,
+    /// Datatype number (0 - 255).
     pub datatype: i16,
+    /// Flat coordinate pairs `[x0, y0, x1, y1, ...]` in database units.
     pub xy: &'data [I32],
 }
 
 /// Wire-like path element with optional width and endpoint style.
 #[derive(Debug)]
 pub struct Path<'data> {
+    /// Element flags.
     pub elflags: Option<u16>,
+    /// Plex group membership ID.
     pub plex: Option<i32>,
+    /// Layer number (0-255).
     pub layer: i16,
+    /// Datatype number (0-255).
     pub datatype: i16,
+    /// Endpoint style: 0 = flush, 1 = round, 2 = extended half-width.
     pub pathtype: Option<i16>,
+    /// Width in database units. Negative means absolute (unaffected by magnification).
     pub width: Option<i32>,
+    /// Flat coordinate pairs in database units.
     pub xy: &'data [I32],
 }
 
 /// Structure reference (instance placement).
 #[derive(Debug)]
 pub struct Sref<'data> {
+    /// Element flags.
     pub elflags: Option<u16>,
+    /// Plex group membership ID.
     pub plex: Option<i32>,
+    /// Name of the referenced structure.
     pub sname: &'data str,
+    /// Transformation (reflection, magnification, rotation).
     pub strans: Option<Strans>,
+    /// Origin point as `[x, y]` in database units.
     pub xy: &'data [I32],
 }
 
 /// Array reference (repeated instance placement in a grid).
 #[derive(Debug)]
 pub struct Aref<'data> {
+    /// Element flags.
     pub elflags: Option<u16>,
+    /// Plex group membership ID.
     pub plex: Option<i32>,
+    /// Name of the referenced structure.
     pub sname: &'data str,
+    /// Transformation (reflection, magnification, rotation).
     pub strans: Option<Strans>,
+    /// `(columns, rows)` in the array grid.
     pub colrow: (i16, i16),
+    /// Three points as `[ref_x, ref_y, col_end_x, col_end_y, row_end_x, row_end_y]`.
+    /// Points are post-STRANS (already transformed).
     pub xy: &'data [I32],
 }
 
 /// Text annotation element.
 #[derive(Debug)]
 pub struct Text<'data> {
+    /// Element flags.
     pub elflags: Option<u16>,
+    /// Plex group membership ID.
     pub plex: Option<i32>,
+    /// Layer number (0--255).
     pub layer: i16,
+    /// Text type number (0--255).
     pub texttype: i16,
+    /// Justification flags (bits 10--11: font, 12--13: vertical, 14--15: horizontal).
     pub presentation: Option<u16>,
+    /// Endpoint style for the text path.
     pub pathtype: Option<i16>,
+    /// Width of text lines in database units.
     pub width: Option<i32>,
+    /// Transformation (reflection, magnification, rotation).
     pub strans: Option<Strans>,
+    /// Origin point as `[x, y]` in database units.
     pub xy: &'data [I32],
+    /// The text string content (up to 512 characters).
     pub string: &'data str,
 }
 
 /// Electrical net node element.
 #[derive(Debug)]
 pub struct Node<'data> {
+    /// Element flags.
     pub elflags: Option<u16>,
+    /// Plex group membership ID.
     pub plex: Option<i32>,
+    /// Layer number (0--255).
     pub layer: i16,
+    /// Node type number (0--255).
     pub nodetype: i16,
+    /// Coordinate pairs (1--50 points) in database units.
     pub xy: &'data [I32],
 }
 
 /// Rectangular box element. Named `GdsBox` to avoid shadowing `std::boxed::Box`.
 #[derive(Debug)]
 pub struct GdsBox<'data> {
+    /// Element flags.
     pub elflags: Option<u16>,
+    /// Plex group membership ID.
     pub plex: Option<i32>,
+    /// Layer number (0--255).
     pub layer: i16,
+    /// Box type number (0--255).
     pub boxtype: i16,
+    /// Five coordinate pairs (closed rectangle) in database units.
     pub xy: &'data [I32],
 }
 
