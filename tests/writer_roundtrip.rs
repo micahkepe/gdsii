@@ -53,10 +53,7 @@ fn roundtrip_file(path: &Path) {
     assert!(
         buf == input[..buf.len()],
         "{name}: output bytes differ from input (first diff at byte {})",
-        buf.iter()
-            .zip(input.iter())
-            .position(|(a, b)| a != b)
-            .unwrap_or(0)
+        buf.iter().zip(input.iter()).position(|(a, b)| a != b).unwrap_or(0)
     );
     if buf.len() < input.len() {
         eprintln!(

@@ -1,4 +1,8 @@
-#![allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_precision_loss)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss
+)]
 /*!
 Generate a synthetic large GDS file for benchmarking.
 
