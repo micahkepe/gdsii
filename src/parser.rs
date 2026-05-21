@@ -6,6 +6,7 @@
 
 use zerocopy::big_endian::{I16, I32};
 
+use crate::float::GdsEightByteReal;
 use crate::reader::{BodyParseError, Record, RecordBody, RecordIter};
 use crate::types::RecordType;
 
@@ -81,13 +82,16 @@ pub struct Property<'data> {
 }
 
 /// Transformation flags from STRANS, MAG, and ANGLE records.
+///
+/// MAG and ANGLE are stored as raw [`GdsEightByteReal`] to preserve the original
+/// encoding for byte-exact roundtrips. Use `f64::from(strans.mag)` to decode.
 #[derive(Debug, Clone, Copy)]
 pub struct Strans {
     pub reflection: bool,
     pub abs_mag: bool,
     pub abs_angle: bool,
-    pub mag: Option<f64>,
-    pub angle: Option<f64>,
+    pub mag: Option<GdsEightByteReal>,
+    pub angle: Option<GdsEightByteReal>,
 }
 
 /// Parsed GDS element (geometry or reference).
@@ -223,12 +227,12 @@ fn extract_u16(
     }
 }
 
-fn extract_f64(
+fn extract_real(
     body: &RecordBody,
     record_type: RecordType,
-) -> Result<f64, ParseError> {
+) -> Result<GdsEightByteReal, ParseError> {
     match body {
-        RecordBody::EightByteReal(s) if !s.is_empty() => Ok(f64::from(s[0])),
+        RecordBody::EightByteReal(s) if !s.is_empty() => Ok(s[0]),
         _ => Err(ParseError::WrongBodyType {
             record_type,
             expected: "EightByteReal with ≥1 element",
@@ -393,11 +397,11 @@ impl<'data> GdsParser<'data> {
         let flags = extract_u16(&strans_rec.body, RecordType::Strans)?;
         let mag = self
             .try_record(RecordType::Mag)?
-            .map(|r| extract_f64(&r.body, RecordType::Mag))
+            .map(|r| extract_real(&r.body, RecordType::Mag))
             .transpose()?;
         let angle = self
             .try_record(RecordType::Angle)?
-            .map(|r| extract_f64(&r.body, RecordType::Angle))
+            .map(|r| extract_real(&r.body, RecordType::Angle))
             .transpose()?;
         Ok(Some(Strans {
             reflection: flags & 0x8000 != 0,

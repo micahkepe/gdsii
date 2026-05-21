@@ -123,14 +123,13 @@ fn write_i32_slice(
     Ok(())
 }
 
-fn write_f64(
+fn write_raw_real(
     sink: &mut impl Write,
     record_type: RecordType,
-    value: f64,
+    value: GdsEightByteReal,
 ) -> Result<(), WriteError> {
-    let real = GdsEightByteReal::try_from(value)?;
     write_record_header(sink, record_type, 0x05, 8)?;
-    sink.write_all(&real.raw())?;
+    sink.write_all(&value.raw())?;
     Ok(())
 }
 
@@ -182,10 +181,10 @@ fn write_strans(
     }
     write_u16(sink, RecordType::Strans, flags)?;
     if let Some(mag) = strans.mag {
-        write_f64(sink, RecordType::Mag, mag)?;
+        write_raw_real(sink, RecordType::Mag, mag)?;
     }
     if let Some(angle) = strans.angle {
-        write_f64(sink, RecordType::Angle, angle)?;
+        write_raw_real(sink, RecordType::Angle, angle)?;
     }
     Ok(())
 }
