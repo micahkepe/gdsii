@@ -13,7 +13,7 @@ use crate::parser::{
     Aref, Boundary, Element, GdsBox, GdsEvent, LibraryBegin, Node, Path, Sref,
     Strans, StructureBegin, Text,
 };
-use crate::types::RecordType;
+use crate::types::{DataType, RecordType};
 
 /// Errors that can occur while writing GDS records.
 #[derive(Debug, thiserror::Error)]
@@ -33,7 +33,7 @@ pub enum WriteError {
 fn write_record_header(
     sink: &mut impl Write,
     record_type: RecordType,
-    data_type: u8,
+    data_type: DataType,
     body_len: usize,
 ) -> Result<(), WriteError> {
     #[expect(
@@ -42,7 +42,7 @@ fn write_record_header(
     )]
     let length = (4 + body_len) as u16;
     sink.write_all(&length.to_be_bytes())?;
-    sink.write_all(&[record_type as u8, data_type])?;
+    sink.write_all(&[record_type as u8, data_type as u8])?;
     Ok(())
 }
 
@@ -50,7 +50,7 @@ fn write_no_data(
     sink: &mut impl Write,
     record_type: RecordType,
 ) -> Result<(), WriteError> {
-    write_record_header(sink, record_type, 0x00, 0)
+    write_record_header(sink, record_type, DataType::NoData, 0)
 }
 
 fn write_i16(
@@ -58,7 +58,7 @@ fn write_i16(
     record_type: RecordType,
     value: i16,
 ) -> Result<(), WriteError> {
-    write_record_header(sink, record_type, 0x02, 2)?;
+    write_record_header(sink, record_type, DataType::TwoByteSignedInt, 2)?;
     sink.write_all(&value.to_be_bytes())?;
     Ok(())
 }
@@ -68,7 +68,7 @@ fn write_i32(
     record_type: RecordType,
     value: i32,
 ) -> Result<(), WriteError> {
-    write_record_header(sink, record_type, 0x03, 4)?;
+    write_record_header(sink, record_type, DataType::FourByteSignedInt, 4)?;
     sink.write_all(&value.to_be_bytes())?;
     Ok(())
 }
@@ -78,7 +78,7 @@ fn write_u16(
     record_type: RecordType,
     value: u16,
 ) -> Result<(), WriteError> {
-    write_record_header(sink, record_type, 0x01, 2)?;
+    write_record_header(sink, record_type, DataType::BitArray, 2)?;
     sink.write_all(&value.to_be_bytes())?;
     Ok(())
 }
@@ -91,7 +91,7 @@ fn write_str(
     let bytes = value.as_bytes();
     let padded = !bytes.len().is_multiple_of(2);
     let body_len = bytes.len() + usize::from(padded);
-    write_record_header(sink, record_type, 0x06, body_len)?;
+    write_record_header(sink, record_type, DataType::AsciiString, body_len)?;
     sink.write_all(bytes)?;
     if padded {
         sink.write_all(&[0x00])?;
@@ -104,7 +104,12 @@ fn write_i16_slice(
     record_type: RecordType,
     values: &[I16],
 ) -> Result<(), WriteError> {
-    write_record_header(sink, record_type, 0x02, values.len() * 2)?;
+    write_record_header(
+        sink,
+        record_type,
+        DataType::TwoByteSignedInt,
+        values.len() * 2,
+    )?;
     for v in values {
         sink.write_all(&v.get().to_be_bytes())?;
     }
@@ -116,7 +121,12 @@ fn write_i32_slice(
     record_type: RecordType,
     values: &[I32],
 ) -> Result<(), WriteError> {
-    write_record_header(sink, record_type, 0x03, values.len() * 4)?;
+    write_record_header(
+        sink,
+        record_type,
+        DataType::FourByteSignedInt,
+        values.len() * 4,
+    )?;
     for v in values {
         sink.write_all(&v.get().to_be_bytes())?;
     }
@@ -128,7 +138,7 @@ fn write_raw_real(
     record_type: RecordType,
     value: GdsEightByteReal,
 ) -> Result<(), WriteError> {
-    write_record_header(sink, record_type, 0x05, 8)?;
+    write_record_header(sink, record_type, DataType::EightByteReal, 8)?;
     sink.write_all(&value.raw())?;
     Ok(())
 }
@@ -141,7 +151,7 @@ fn write_two_f64s(
 ) -> Result<(), WriteError> {
     let ra = GdsEightByteReal::try_from(a)?;
     let rb = GdsEightByteReal::try_from(b)?;
-    write_record_header(sink, record_type, 0x05, 16)?;
+    write_record_header(sink, record_type, DataType::EightByteReal, 16)?;
     sink.write_all(&ra.raw())?;
     sink.write_all(&rb.raw())?;
     Ok(())
@@ -238,7 +248,12 @@ fn write_aref(sink: &mut impl Write, a: &Aref<'_>) -> Result<(), WriteError> {
     if let Some(ref st) = a.strans {
         write_strans(sink, st)?;
     }
-    write_record_header(sink, RecordType::Colrow, 0x02, 4)?;
+    write_record_header(
+        sink,
+        RecordType::Colrow,
+        DataType::TwoByteSignedInt,
+        4,
+    )?;
     sink.write_all(&a.colrow.0.to_be_bytes())?;
     sink.write_all(&a.colrow.1.to_be_bytes())?;
     write_i32_slice(sink, RecordType::Xy, a.xy)?;
