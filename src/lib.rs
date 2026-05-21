@@ -12,3 +12,4 @@ pub mod writer;
 /* Re-exports */
 pub use float::*;
 pub use types::*;
+pub use zerocopy::big_endian::{I16, I32, U16};
