@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/micahkepe/gdsii"
 homepage = "https://github.com/micahkepe/gdsii"
 keywords = ["gdsii", "gds", "eda", "layout", "parser"]
-exclude = ["tests/data/", "examples/"]
+exclude = ["tests/data/", "examples/", ".github/"]
 
 [dependencies]
 thiserror = "2.0.18"
