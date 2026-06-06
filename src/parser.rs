@@ -859,21 +859,32 @@ impl<'data> Iterator for GdsParser<'data> {
 
 #[cfg(test)]
 mod tests {
+
+    use crate::DataType;
+
     use super::*;
 
     #[expect(
         clippy::cast_possible_truncation,
         reason = "test-only, lengths always small"
     )]
-    const fn header(length: u16, record_type: u8, data_type: u8) -> [u8; 4] {
-        [(length >> 8) as u8, length as u8, record_type, data_type]
+    const fn header(
+        length: u16,
+        record_type: RecordType,
+        data_type: DataType,
+    ) -> [u8; 4] {
+        [(length >> 8) as u8, length as u8, record_type as u8, data_type as u8]
     }
 
     #[expect(
         clippy::cast_possible_truncation,
         reason = "test-only, lengths always small"
     )]
-    fn gds_record(record_type: u8, data_type: u8, body: &[u8]) -> Vec<u8> {
+    fn gds_record(
+        record_type: RecordType,
+        data_type: DataType,
+        body: &[u8],
+    ) -> Vec<u8> {
         let length = (4 + body.len()) as u16;
         let mut buf = Vec::with_capacity(length as usize);
         buf.extend_from_slice(&header(length, record_type, data_type));
@@ -881,62 +892,78 @@ mod tests {
         buf
     }
 
-    fn no_data_record(record_type: u8) -> Vec<u8> {
-        gds_record(record_type, 0x00, &[])
+    fn no_data_record(record_type: RecordType) -> Vec<u8> {
+        gds_record(record_type, DataType::NoData, &[])
     }
 
-    fn i16_record(record_type: u8, value: i16) -> Vec<u8> {
-        gds_record(record_type, 0x02, &value.to_be_bytes())
+    fn i16_record(record_type: RecordType, value: i16) -> Vec<u8> {
+        gds_record(
+            record_type,
+            DataType::TwoByteSignedInt,
+            &value.to_be_bytes(),
+        )
     }
 
-    fn i32_record(record_type: u8, value: i32) -> Vec<u8> {
-        gds_record(record_type, 0x03, &value.to_be_bytes())
+    fn i32_record(record_type: RecordType, value: i32) -> Vec<u8> {
+        gds_record(
+            record_type,
+            DataType::FourByteSignedInt,
+            &value.to_be_bytes(),
+        )
     }
 
-    fn string_record(record_type: u8, s: &str) -> Vec<u8> {
+    fn string_record(record_type: RecordType, s: &str) -> Vec<u8> {
         let mut body: Vec<u8> = s.bytes().collect();
         if !body.len().is_multiple_of(2) {
             body.push(0x00);
         }
-        gds_record(record_type, 0x06, &body)
+        gds_record(record_type, DataType::AsciiString, &body)
     }
 
     fn xy_record(coords: &[i32]) -> Vec<u8> {
         let body: Vec<u8> =
             coords.iter().flat_map(|c| c.to_be_bytes()).collect();
-        gds_record(0x10, 0x03, &body)
+        gds_record(RecordType::Xy, DataType::FourByteSignedInt, &body)
     }
 
-    fn bitarray_record(record_type: u8, value: u16) -> Vec<u8> {
-        gds_record(record_type, 0x01, &value.to_be_bytes())
+    fn bitarray_record(record_type: RecordType, value: u16) -> Vec<u8> {
+        gds_record(record_type, DataType::BitArray, &value.to_be_bytes())
     }
 
     /// Builds a minimal valid library wrapper around inner structure bytes.
     fn minimal_library(inner: &[u8]) -> Vec<u8> {
         let mut buf = Vec::new();
-        buf.extend(i16_record(0x00, 5)); // HEADER version=5
-        buf.extend(gds_record(0x01, 0x02, &[0u8; 24])); // BGNLIB
-        buf.extend(string_record(0x02, "TEST")); // LIBNAME
+        buf.extend(i16_record(RecordType::Header, 5));
         buf.extend(gds_record(
-            0x03,
-            0x05,
+            RecordType::BgnLib,
+            DataType::TwoByteSignedInt,
+            &[0u8; 24],
+        ));
+        buf.extend(string_record(RecordType::LibName, "TEST"));
+        buf.extend(gds_record(
+            RecordType::Units,
+            DataType::EightByteReal,
             &[
                 0x3E, 0x41, 0x89, 0x37, 0x4B, 0xC6, 0xA7, 0xEF, // 0.001
                 0x39, 0x44, 0xB8, 0x2F, 0xA0, 0x9B, 0x5A, 0x54, // 1e-9
             ],
         )); // UNITS
         buf.extend_from_slice(inner);
-        buf.extend(no_data_record(0x04)); // ENDLIB
+        buf.extend(no_data_record(RecordType::EndLib));
         buf
     }
 
     /// Builds a minimal structure wrapper around inner element bytes.
     fn minimal_structure(name: &str, inner: &[u8]) -> Vec<u8> {
         let mut buf = Vec::new();
-        buf.extend(gds_record(0x05, 0x02, &[0u8; 24])); // BGNSTR
-        buf.extend(string_record(0x06, name)); // STRNAME
+        buf.extend(gds_record(
+            RecordType::BgnStr,
+            DataType::TwoByteSignedInt,
+            &[0u8; 24],
+        )); // BGNSTR
+        buf.extend(string_record(RecordType::StrName, name));
         buf.extend_from_slice(inner);
-        buf.extend(no_data_record(0x07)); // ENDSTR
+        buf.extend(no_data_record(RecordType::EndStr));
         buf
     }
 
@@ -981,11 +1008,11 @@ mod tests {
     #[test]
     fn parse_boundary_element() {
         let mut element = Vec::new();
-        element.extend(no_data_record(0x08)); // BOUNDARY
-        element.extend(i16_record(0x0D, 5)); // LAYER=5
-        element.extend(i16_record(0x0E, 3)); // DATATYPE=3
+        element.extend(no_data_record(RecordType::Boundary));
+        element.extend(i16_record(RecordType::Layer, 5));
+        element.extend(i16_record(RecordType::Datatype, 3));
         element.extend(xy_record(&[0, 0, 100, 0, 100, 100, 0, 100, 0, 0]));
-        element.extend(no_data_record(0x11)); // ENDEL
+        element.extend(no_data_record(RecordType::Endel));
 
         let structure = minimal_structure("TOP", &element);
         let data = minimal_library(&structure);
@@ -1004,13 +1031,13 @@ mod tests {
     #[test]
     fn parse_path_with_optional_fields() {
         let mut element = Vec::new();
-        element.extend(no_data_record(0x09)); // PATH
-        element.extend(i16_record(0x0D, 1)); // LAYER
-        element.extend(i16_record(0x0E, 0)); // DATATYPE
-        element.extend(i16_record(0x21, 2)); // PATHTYPE=2
-        element.extend(i32_record(0x0F, 500)); // WIDTH=500
+        element.extend(no_data_record(RecordType::Path));
+        element.extend(i16_record(RecordType::Layer, 1));
+        element.extend(i16_record(RecordType::Datatype, 0));
+        element.extend(i16_record(RecordType::Pathtype, 2));
+        element.extend(i32_record(RecordType::Width, 500));
         element.extend(xy_record(&[0, 0, 1000, 0]));
-        element.extend(no_data_record(0x11)); // ENDEL
+        element.extend(no_data_record(RecordType::Endel));
 
         let structure = minimal_structure("TOP", &element);
         let data = minimal_library(&structure);
@@ -1028,11 +1055,11 @@ mod tests {
     #[test]
     fn parse_path_without_optional_fields() {
         let mut element = Vec::new();
-        element.extend(no_data_record(0x09)); // PATH
-        element.extend(i16_record(0x0D, 1)); // LAYER
-        element.extend(i16_record(0x0E, 0)); // DATATYPE
+        element.extend(no_data_record(RecordType::Path));
+        element.extend(i16_record(RecordType::Layer, 1));
+        element.extend(i16_record(RecordType::Datatype, 0));
         element.extend(xy_record(&[0, 0, 1000, 0]));
-        element.extend(no_data_record(0x11)); // ENDEL
+        element.extend(no_data_record(RecordType::Endel));
 
         let structure = minimal_structure("TOP", &element);
         let data = minimal_library(&structure);
@@ -1050,11 +1077,11 @@ mod tests {
     #[test]
     fn parse_sref_with_strans() {
         let mut element = Vec::new();
-        element.extend(no_data_record(0x0A)); // SREF
-        element.extend(string_record(0x12, "CHILD")); // SNAME
-        element.extend(bitarray_record(0x1A, 0x8000)); // STRANS: reflection
+        element.extend(no_data_record(RecordType::Sref));
+        element.extend(string_record(RecordType::Sname, "CHILD"));
+        element.extend(bitarray_record(RecordType::Strans, 0x8000));
         element.extend(xy_record(&[100, 200]));
-        element.extend(no_data_record(0x11)); // ENDEL
+        element.extend(no_data_record(RecordType::Endel));
 
         let structure = minimal_structure("TOP", &element);
         let data = minimal_library(&structure);
@@ -1075,13 +1102,13 @@ mod tests {
     #[test]
     fn parse_element_with_elflags_and_plex() {
         let mut element = Vec::new();
-        element.extend(no_data_record(0x08)); // BOUNDARY
-        element.extend(bitarray_record(0x26, 0x0002)); // ELFLAGS
-        element.extend(i32_record(0x2F, 42)); // PLEX
-        element.extend(i16_record(0x0D, 0)); // LAYER
-        element.extend(i16_record(0x0E, 0)); // DATATYPE
+        element.extend(no_data_record(RecordType::Boundary));
+        element.extend(bitarray_record(RecordType::Elflags, 0x0002));
+        element.extend(i32_record(RecordType::Plex, 42));
+        element.extend(i16_record(RecordType::Layer, 0));
+        element.extend(i16_record(RecordType::Datatype, 0));
         element.extend(xy_record(&[0, 0, 1, 0, 1, 1, 0, 1, 0, 0]));
-        element.extend(no_data_record(0x11)); // ENDEL
+        element.extend(no_data_record(RecordType::Endel));
 
         let structure = minimal_structure("TOP", &element);
         let data = minimal_library(&structure);
@@ -1099,15 +1126,15 @@ mod tests {
     #[test]
     fn parse_element_with_properties() {
         let mut element = Vec::new();
-        element.extend(no_data_record(0x08)); // BOUNDARY
-        element.extend(i16_record(0x0D, 0)); // LAYER
-        element.extend(i16_record(0x0E, 0)); // DATATYPE
+        element.extend(no_data_record(RecordType::Boundary));
+        element.extend(i16_record(RecordType::Layer, 0));
+        element.extend(i16_record(RecordType::Datatype, 0));
         element.extend(xy_record(&[0, 0, 1, 0, 1, 1, 0, 1, 0, 0]));
-        element.extend(i16_record(0x2B, 1)); // PROPATTR=1
-        element.extend(string_record(0x2C, "net_name")); // PROPVALUE
-        element.extend(i16_record(0x2B, 2)); // PROPATTR=2
-        element.extend(string_record(0x2C, "signal")); // PROPVALUE
-        element.extend(no_data_record(0x11)); // ENDEL
+        element.extend(i16_record(RecordType::Propattr, 1));
+        element.extend(string_record(RecordType::Propvalue, "net_name"));
+        element.extend(i16_record(RecordType::Propattr, 2));
+        element.extend(string_record(RecordType::Propvalue, "signal"));
+        element.extend(no_data_record(RecordType::Endel));
 
         let structure = minimal_structure("TOP", &element);
         let data = minimal_library(&structure);
@@ -1134,11 +1161,19 @@ mod tests {
     #[test]
     fn unexpected_record_in_library_state() {
         let mut data = Vec::new();
-        data.extend(i16_record(0x00, 5)); // HEADER
-        data.extend(gds_record(0x01, 0x02, &[0u8; 24])); // BGNLIB
-        data.extend(string_record(0x02, "LIB")); // LIBNAME
-        data.extend(gds_record(0x03, 0x05, &[0u8; 16])); // UNITS
-        data.extend(i16_record(0x0D, 0)); // LAYER — wrong context
+        data.extend(i16_record(RecordType::Header, 5));
+        data.extend(gds_record(
+            RecordType::BgnLib,
+            DataType::TwoByteSignedInt,
+            &[0u8; 24],
+        ));
+        data.extend(string_record(RecordType::LibName, "LIB"));
+        data.extend(gds_record(
+            RecordType::Units,
+            DataType::EightByteReal,
+            &[0u8; 16],
+        ));
+        data.extend(i16_record(RecordType::Layer, 0)); // LAYER — wrong context
 
         let mut parser = GdsParser::new(&data);
         let first = parser.next().unwrap();
@@ -1150,7 +1185,8 @@ mod tests {
 
     #[test]
     fn unexpected_record_in_structure_state() {
-        let bad_inner = gds_record(0x03, 0x05, &[0u8; 16]); // UNITS — invalid inside structure
+        let bad_inner =
+            gds_record(RecordType::Units, DataType::EightByteReal, &[0u8; 16]); // UNITS — invalid inside structure
         let structure = minimal_structure("TOP", &bad_inner);
         let data = minimal_library(&structure);
 
