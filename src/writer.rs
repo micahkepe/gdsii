@@ -224,6 +224,12 @@ fn write_path(sink: &mut impl Write, p: &Path<'_>) -> Result<(), WriteError> {
     if let Some(w) = p.width {
         write_i32(sink, RecordType::Width, w)?;
     }
+    if let Some(b) = p.bgn_extn {
+        write_i32(sink, RecordType::BgnExtn, b)?;
+    }
+    if let Some(e) = p.end_extn {
+        write_i32(sink, RecordType::EndExtn, e)?;
+    }
     write_i32_slice(sink, RecordType::Xy, p.xy)?;
     Ok(())
 }

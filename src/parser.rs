@@ -149,10 +149,14 @@ pub struct Path<'data> {
     pub layer: i16,
     /// Datatype number (0-255).
     pub datatype: i16,
-    /// Endpoint style: 0 = flush, 1 = round, 2 = extended half-width.
+    /// Endpoint style: 0 = flush, 1 = round, 2 = extended half-width, 4 = custom extensions.
     pub pathtype: Option<i16>,
     /// Width in database units. Negative means absolute (unaffected by magnification).
     pub width: Option<i32>,
+    /// Start-point extension in database units. Meaningful only for `pathtype` 4.
+    pub bgn_extn: Option<i32>,
+    /// End-point extension in database units. Meaningful only for `pathtype` 4.
+    pub end_extn: Option<i32>,
     /// Flat coordinate pairs in database units.
     pub xy: &'data [I32],
 }
@@ -615,6 +619,14 @@ impl<'data> GdsParser<'data> {
             .try_record(RecordType::Width)?
             .map(|r| extract_i32(&r.body, RecordType::Width))
             .transpose()?;
+        let bgn_extn = self
+            .try_record(RecordType::BgnExtn)?
+            .map(|r| extract_i32(&r.body, RecordType::BgnExtn))
+            .transpose()?;
+        let end_extn = self
+            .try_record(RecordType::EndExtn)?
+            .map(|r| extract_i32(&r.body, RecordType::EndExtn))
+            .transpose()?;
         let xy = extract_i32_slice(
             &self.expect_record(RecordType::Xy, "Path")?.body,
             RecordType::Xy,
@@ -627,6 +639,8 @@ impl<'data> GdsParser<'data> {
             datatype,
             pathtype,
             width,
+            bgn_extn,
+            end_extn,
             xy,
         })))
     }
@@ -1050,6 +1064,36 @@ mod tests {
         };
         assert_eq!(p.pathtype, Some(2));
         assert_eq!(p.width, Some(500));
+        assert_eq!(p.bgn_extn, None);
+        assert_eq!(p.end_extn, None);
+    }
+
+    #[test]
+    fn parse_path_with_custom_extensions() {
+        let mut element = Vec::new();
+        element.extend(no_data_record(RecordType::Path));
+        element.extend(i16_record(RecordType::Layer, 1));
+        element.extend(i16_record(RecordType::Datatype, 0));
+        element.extend(i16_record(RecordType::Pathtype, 4));
+        element.extend(i32_record(RecordType::Width, 500));
+        element.extend(i32_record(RecordType::BgnExtn, 250));
+        element.extend(i32_record(RecordType::EndExtn, -100));
+        element.extend(xy_record(&[0, 0, 1000, 0]));
+        element.extend(no_data_record(RecordType::Endel));
+
+        let structure = minimal_structure("TOP", &element);
+        let data = minimal_library(&structure);
+        let events: Vec<_> = GdsParser::new(&data)
+            .collect::<Result<_, _>>()
+            .expect("parse failed");
+
+        let GdsEvent::Element(Element::Path(p)) = &events[2] else {
+            panic!("expected Path");
+        };
+        assert_eq!(p.pathtype, Some(4));
+        assert_eq!(p.width, Some(500));
+        assert_eq!(p.bgn_extn, Some(250));
+        assert_eq!(p.end_extn, Some(-100));
     }
 
     #[test]
