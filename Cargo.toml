@@ -1,6 +1,6 @@
 [package]
 name = "gdsii"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Micah Kepe <micahkepe@gmail.com>"]
 edition = "2024"
 description = "Fast, zero-copy, streaming GDSII parser and writer."
