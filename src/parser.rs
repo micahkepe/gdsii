@@ -1096,6 +1096,43 @@ mod tests {
         assert_eq!(p.end_extn, Some(-100));
     }
 
+    /// Full Release 6.0 PATH BNF with every optional field present:
+    ///   PATH [ELFLAGS] [PLEX] LAYER DATATYPE [PATHTYPE] [WIDTH] [BGNEXTN] [ENDEXTN] XY
+    #[test]
+    fn parse_path_full_bnf_6_0() {
+        let mut element = Vec::new();
+        element.extend(no_data_record(RecordType::Path));
+        element.extend(bitarray_record(RecordType::Elflags, 0x0001));
+        element.extend(i32_record(RecordType::Plex, 7));
+        element.extend(i16_record(RecordType::Layer, 68));
+        element.extend(i16_record(RecordType::Datatype, 20));
+        element.extend(i16_record(RecordType::Pathtype, 4));
+        element.extend(i32_record(RecordType::Width, 140));
+        element.extend(i32_record(RecordType::BgnExtn, 70));
+        element.extend(i32_record(RecordType::EndExtn, -30));
+        element.extend(xy_record(&[0, 0, 500, 0, 500, 500]));
+        element.extend(no_data_record(RecordType::Endel));
+
+        let structure = minimal_structure("TOP", &element);
+        let data = minimal_library(&structure);
+        let events: Vec<_> = GdsParser::new(&data)
+            .collect::<Result<_, _>>()
+            .expect("parse failed");
+
+        let GdsEvent::Element(Element::Path(p)) = &events[2] else {
+            panic!("expected Path");
+        };
+        assert_eq!(p.elflags, Some(0x0001));
+        assert_eq!(p.plex, Some(7));
+        assert_eq!(p.layer, 68);
+        assert_eq!(p.datatype, 20);
+        assert_eq!(p.pathtype, Some(4));
+        assert_eq!(p.width, Some(140));
+        assert_eq!(p.bgn_extn, Some(70));
+        assert_eq!(p.end_extn, Some(-30));
+        assert_eq!(p.xy.len(), 6);
+    }
+
     #[test]
     fn parse_path_without_optional_fields() {
         let mut element = Vec::new();
