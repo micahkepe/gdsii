@@ -289,6 +289,18 @@ pub enum RecordType {
     /// present, the element is not a plex member.
     Plex = 0x2F,
 
+    /// Contains four bytes which specify in database units the distance a path outline begins
+    /// before the first point of the path. This optional record is meaningful only for paths with
+    /// a PATHTYPE of 4 (custom square-ended extensions). If omitted, an extension of zero is
+    /// assumed.
+    BgnExtn = 0x30,
+
+    /// Contains four bytes which specify in database units the distance a path outline extends
+    /// beyond the last point of the path. This optional record is meaningful only for paths with
+    /// a PATHTYPE of 4 (custom square-ended extensions). If omitted, an extension of zero is
+    /// assumed.
+    EndExtn = 0x31,
+
     /// Contains two bytes which specify the number of the current reel of tape for a multi-reel
     /// Stream file. For the first tape, the TAPENUM is 1; for the second tape, the TAPENUM is 2.
     /// For each additional tape, increment the TAPENUM by one.
