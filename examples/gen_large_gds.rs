@@ -1,4 +1,4 @@
-#![allow(
+#![expect(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_precision_loss
@@ -90,7 +90,7 @@ fn main() {
                     plex: None,
                     layer,
                     datatype: 0,
-                    xy: &xy,
+                    xy: xy[..].into(),
                 })))
                 .unwrap();
         }
@@ -131,7 +131,7 @@ fn main() {
                 sname: &leaf_name,
                 strans: None,
                 colrow: (cols_per_block, rows_per_block),
-                xy: &xy,
+                xy: xy[..].into(),
             })))
             .unwrap();
 
@@ -161,7 +161,7 @@ fn main() {
                     plex: None,
                     layer: 10 + (fill_idx % 4) as i16,
                     datatype: 0,
-                    xy: &xy,
+                    xy: xy[..].into(),
                 })))
                 .unwrap();
         }
@@ -190,7 +190,7 @@ fn main() {
                 plex: None,
                 sname: &block_name,
                 strans: None,
-                xy: &xy,
+                xy: xy[..].into(),
             })))
             .unwrap();
     }

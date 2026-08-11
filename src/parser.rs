@@ -1,13 +1,17 @@
 //! Zero-copy, streaming GDS event parser.
 //!
-//! Wraps [`RecordIter`] and yields high-level [`GdsEvent`]s -- one per logical GDS unit
-//! (library header, structure header, complete element, property, structural delimiters).
-//! All borrowed data references the original input buffer; no allocations occur during parsing.
+//! Wraps [`RecordIter`] and yields high-level [`GdsEvent`]s -- one per logical
+//! GDS unit (library header, structure header, complete element, property,
+//! structural delimiters). All borrowed data references the original input
+//! buffer; no allocations occur during parsing, except for elements whose
+//! vertices span several XY records (see [`XyCoords`]).
+
+use std::borrow::Cow;
 
 use zerocopy::big_endian::{I16, I32};
 
 use crate::float::GdsEightByteReal;
-use crate::reader::{BodyParseError, Record, RecordBody, RecordIter};
+use crate::reader::{Record, RecordBody, RecordError, RecordIter};
 use crate::types::RecordType;
 
 /// Errors that can occur during GDS stream parsing.
@@ -24,7 +28,7 @@ pub enum ParseError {
     WrongBodyType { record_type: RecordType, expected: &'static str },
     /// Underlying record body could not be parsed.
     #[error(transparent)]
-    Body(#[from] BodyParseError),
+    Body(#[from] RecordError),
 }
 
 // ==============================================================================
@@ -111,6 +115,75 @@ pub struct Strans {
     pub angle: Option<GdsEightByteReal>,
 }
 
+/// Flat coordinate list of an element: `[x0, y0, x1, y1, ...]` in database
+/// units.
+///
+/// Normally a zero-copy view into the input buffer. A record's length field is
+/// a `u16`, so a single XY record holds at most 8190 points; tools that decline
+/// to fracture larger polygons emit one element as several consecutive XY
+/// records instead. Those are stitched into a single owned buffer, which is the
+/// only case in which parsing allocates.
+///
+/// Derefs to `[I32]`, so `len`, `iter`, indexing and slicing work directly.
+///
+/// NOTE: [`len`](slice::len) counts *coordinates*; use
+/// [`num_points`](Self::num_points) for the vertex count.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XyCoords<'data>(Cow<'data, [I32]>);
+
+impl XyCoords<'_> {
+    /// Number of `(x, y)` vertices, i.e. half the coordinate count.
+    #[must_use]
+    pub fn num_points(&self) -> usize {
+        self.0.len() / 2
+    }
+
+    /// Borrows the coordinates as a flat slice.
+    #[must_use]
+    pub fn as_slice(&self) -> &[I32] {
+        &self.0
+    }
+
+    /// Appends the coordinates of a continuation XY record, allocating on the
+    /// first call.
+    fn extend_from(&mut self, more: &[I32]) {
+        self.0.to_mut().extend_from_slice(more);
+    }
+}
+
+impl std::ops::Deref for XyCoords<'_> {
+    type Target = [I32];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<[I32]> for XyCoords<'_> {
+    fn as_ref(&self) -> &[I32] {
+        &self.0
+    }
+}
+
+impl<'data> From<&'data [I32]> for XyCoords<'data> {
+    fn from(coords: &'data [I32]) -> Self {
+        Self(Cow::Borrowed(coords))
+    }
+}
+
+/// Borrows a fixed-size coordinate array. Zero-copy.
+impl<'data, const N: usize> From<&'data [I32; N]> for XyCoords<'data> {
+    fn from(coords: &'data [I32; N]) -> Self {
+        Self(Cow::Borrowed(coords))
+    }
+}
+
+impl From<Vec<I32>> for XyCoords<'_> {
+    fn from(coords: Vec<I32>) -> Self {
+        Self(Cow::Owned(coords))
+    }
+}
+
 /// Parsed GDS element (geometry or reference).
 #[derive(Debug)]
 pub enum Element<'data> {
@@ -135,7 +208,7 @@ pub struct Boundary<'data> {
     /// Datatype number (0 - 255).
     pub datatype: i16,
     /// Flat coordinate pairs `[x0, y0, x1, y1, ...]` in database units.
-    pub xy: &'data [I32],
+    pub xy: XyCoords<'data>,
 }
 
 /// Wire-like path element with optional width and endpoint style.
@@ -158,7 +231,7 @@ pub struct Path<'data> {
     /// End-point extension in database units. Meaningful only for `pathtype` 4.
     pub end_extn: Option<i32>,
     /// Flat coordinate pairs in database units.
-    pub xy: &'data [I32],
+    pub xy: XyCoords<'data>,
 }
 
 /// Structure reference (instance placement).
@@ -173,7 +246,7 @@ pub struct Sref<'data> {
     /// Transformation (reflection, magnification, rotation).
     pub strans: Option<Strans>,
     /// Origin point as `[x, y]` in database units.
-    pub xy: &'data [I32],
+    pub xy: XyCoords<'data>,
 }
 
 /// Array reference (repeated instance placement in a grid).
@@ -191,7 +264,7 @@ pub struct Aref<'data> {
     pub colrow: (i16, i16),
     /// Three points as `[ref_x, ref_y, col_end_x, col_end_y, row_end_x, row_end_y]`.
     /// Points are post-STRANS (already transformed).
-    pub xy: &'data [I32],
+    pub xy: XyCoords<'data>,
 }
 
 /// Text annotation element.
@@ -214,7 +287,7 @@ pub struct Text<'data> {
     /// Transformation (reflection, magnification, rotation).
     pub strans: Option<Strans>,
     /// Origin point as `[x, y]` in database units.
-    pub xy: &'data [I32],
+    pub xy: XyCoords<'data>,
     /// The text string content (up to 512 characters).
     pub string: &'data str,
 }
@@ -231,7 +304,7 @@ pub struct Node<'data> {
     /// Node type number (0--255).
     pub nodetype: i16,
     /// Coordinate pairs (1--50 points) in database units.
-    pub xy: &'data [I32],
+    pub xy: XyCoords<'data>,
 }
 
 /// Rectangular box element. Named `GdsBox` to avoid shadowing `std::boxed::Box`.
@@ -246,7 +319,7 @@ pub struct GdsBox<'data> {
     /// Box type number (0--255).
     pub boxtype: i16,
     /// Five coordinate pairs (closed rectangle) in database units.
-    pub xy: &'data [I32],
+    pub xy: XyCoords<'data>,
 }
 
 // ==============================================================================
@@ -477,6 +550,36 @@ impl<'data> GdsParser<'data> {
         }))
     }
 
+    /// Reads the XY record of an element whose vertex count is fixed and small
+    /// (SREF, AREF, TEXT, BOX). A continuation record cannot be legitimate
+    /// here, so exactly one XY record is consumed and a stray second one is
+    /// left to be reported by [`Self::finish_element`].
+    fn parse_single_xy(
+        &mut self,
+        context: &'static str,
+    ) -> Result<XyCoords<'data>, ParseError> {
+        let rec = self.expect_record(RecordType::Xy, context)?;
+        Ok(XyCoords::from(extract_i32_slice(&rec.body, RecordType::Xy)?))
+    }
+
+    /// Reads the XY record(s) of an element whose vertex count is unbounded
+    /// (BOUNDARY, PATH, NODE).
+    ///
+    /// A record's length field is a `u16`, capping one XY record at 8190
+    /// points. Writers that decline to fracture larger polygons emit the
+    /// element as several consecutive XY records, which are concatenated here.
+    /// The single-record case stays borrowed; only a continuation allocates.
+    fn parse_multi_xy(
+        &mut self,
+        context: &'static str,
+    ) -> Result<XyCoords<'data>, ParseError> {
+        let mut xy = self.parse_single_xy(context)?;
+        while let Some(rec) = self.try_record(RecordType::Xy)? {
+            xy.extend_from(extract_i32_slice(&rec.body, RecordType::Xy)?);
+        }
+        Ok(xy)
+    }
+
     /// Consume PROPATTR/PROPVALUE pairs and ENDEL, transitioning to Structure state.
     /// If the next record is PROPATTR, transition to Properties state for streaming.
     /// Otherwise expect ENDEL directly.
@@ -587,10 +690,7 @@ impl<'data> GdsParser<'data> {
             &self.expect_record(RecordType::Datatype, "Boundary")?.body,
             RecordType::Datatype,
         )?;
-        let xy = extract_i32_slice(
-            &self.expect_record(RecordType::Xy, "Boundary")?.body,
-            RecordType::Xy,
-        )?;
+        let xy = self.parse_multi_xy("Boundary")?;
         self.finish_element()?;
         Ok(GdsEvent::Element(Element::Boundary(Boundary {
             elflags,
@@ -627,10 +727,7 @@ impl<'data> GdsParser<'data> {
             .try_record(RecordType::EndExtn)?
             .map(|r| extract_i32(&r.body, RecordType::EndExtn))
             .transpose()?;
-        let xy = extract_i32_slice(
-            &self.expect_record(RecordType::Xy, "Path")?.body,
-            RecordType::Xy,
-        )?;
+        let xy = self.parse_multi_xy("Path")?;
         self.finish_element()?;
         Ok(GdsEvent::Element(Element::Path(Path {
             elflags,
@@ -652,10 +749,7 @@ impl<'data> GdsParser<'data> {
             RecordType::Sname,
         )?;
         let strans = self.parse_strans()?;
-        let xy = extract_i32_slice(
-            &self.expect_record(RecordType::Xy, "Sref")?.body,
-            RecordType::Xy,
-        )?;
+        let xy = self.parse_single_xy("Sref")?;
         self.finish_element()?;
         Ok(GdsEvent::Element(Element::Sref(Sref {
             elflags,
@@ -683,10 +777,7 @@ impl<'data> GdsParser<'data> {
             });
         }
         let colrow = (colrow_slice[0].get(), colrow_slice[1].get());
-        let xy = extract_i32_slice(
-            &self.expect_record(RecordType::Xy, "Aref")?.body,
-            RecordType::Xy,
-        )?;
+        let xy = self.parse_single_xy("Aref")?;
         self.finish_element()?;
         Ok(GdsEvent::Element(Element::Aref(Aref {
             elflags,
@@ -721,10 +812,7 @@ impl<'data> GdsParser<'data> {
             .map(|r| extract_i32(&r.body, RecordType::Width))
             .transpose()?;
         let strans = self.parse_strans()?;
-        let xy = extract_i32_slice(
-            &self.expect_record(RecordType::Xy, "Text")?.body,
-            RecordType::Xy,
-        )?;
+        let xy = self.parse_single_xy("Text")?;
         let string = extract_str(
             &self.expect_record(RecordType::String, "Text")?.body,
             RecordType::String,
@@ -754,10 +842,7 @@ impl<'data> GdsParser<'data> {
             &self.expect_record(RecordType::Nodetype, "Node")?.body,
             RecordType::Nodetype,
         )?;
-        let xy = extract_i32_slice(
-            &self.expect_record(RecordType::Xy, "Node")?.body,
-            RecordType::Xy,
-        )?;
+        let xy = self.parse_multi_xy("Node")?;
         self.finish_element()?;
         Ok(GdsEvent::Element(Element::Node(Node {
             elflags,
@@ -778,10 +863,7 @@ impl<'data> GdsParser<'data> {
             &self.expect_record(RecordType::BoxType, "Box")?.body,
             RecordType::BoxType,
         )?;
-        let xy = extract_i32_slice(
-            &self.expect_record(RecordType::Xy, "Box")?.body,
-            RecordType::Xy,
-        )?;
+        let xy = self.parse_single_xy("Box")?;
         self.finish_element()?;
         Ok(GdsEvent::Element(Element::Box(GdsBox {
             elflags,
@@ -1286,5 +1368,32 @@ mod tests {
         assert!(first.is_err());
         assert!(parser.next().is_none());
         assert!(parser.next().is_none());
+    }
+
+    #[test]
+    fn boundary_concatenates_split_xy_records() {
+        // A record's u16 length field caps one XY record at 8190 points, so
+        // `KLayout` emits larger polygons as several consecutive XY records in
+        // a single BOUNDARY. Reading one used to fail with
+        // "unexpected record Xy in element end".
+        let mut element = Vec::new();
+        element.extend(no_data_record(RecordType::Boundary));
+        element.extend(i16_record(RecordType::Layer, 5));
+        element.extend(i16_record(RecordType::Datatype, 3));
+        element.extend(xy_record(&[0, 0, 100, 0, 100, 100]));
+        element.extend(xy_record(&[0, 100, 0, 0]));
+        element.extend(no_data_record(RecordType::Endel));
+
+        let data = minimal_library(&minimal_structure("TOP", &element));
+        let events: Vec<_> = GdsParser::new(&data)
+            .collect::<Result<_, _>>()
+            .expect("parse failed");
+
+        let GdsEvent::Element(Element::Boundary(b)) = &events[2] else {
+            panic!("expected Boundary");
+        };
+        let coords: Vec<i32> = b.xy.iter().map(|c| c.get()).collect();
+        assert_eq!(coords, [0, 0, 100, 0, 100, 100, 0, 100, 0, 0]);
+        assert_eq!(b.xy.num_points(), 5);
     }
 }

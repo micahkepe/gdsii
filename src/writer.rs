@@ -1,8 +1,8 @@
 //! GDS binary writer — serializes [`GdsEvent`]s to GDSII byte streams.
 //!
-//! Symmetric with [`crate::parser::GdsParser`]: the parser reads bytes -> events,
-//! the writer takes events -> bytes. Together they enable streaming read-transform-write
-//! pipelines with no full-file buffering.
+//! Symmetric with [`crate::parser::GdsParser`]: the parser reads bytes ->
+//! events, the writer takes events -> bytes. Together they enable streaming
+//! read-transform-write pipelines with no full-file buffering.
 
 use std::io::Write;
 
@@ -14,6 +14,7 @@ use crate::parser::{
     Strans, StructureBegin, Text,
 };
 use crate::types::{DataType, RecordType};
+use crate::{MAX_RECORD_BODY, MAX_XY_POINTS_PER_RECORD};
 
 /// Errors that can occur while writing GDS records.
 #[derive(Debug, thiserror::Error)]
@@ -24,6 +25,11 @@ pub enum WriteError {
     /// An f64 value could not be encoded as a GDS real.
     #[error("f64 not representable as GDS real")]
     Float(#[from] NotRepresentable),
+    /// A record body was larger than the `u16` length field can describe.
+    #[error(
+        "{record_type:?} body of {body_len} bytes exceeds the {max}-byte maximum record body"
+    )]
+    RecordTooLarge { record_type: RecordType, body_len: usize, max: usize },
 }
 
 // ==============================================================================
@@ -36,11 +42,15 @@ fn write_record_header(
     data_type: DataType,
     body_len: usize,
 ) -> Result<(), WriteError> {
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "GDS record bodies are always well under 64k"
-    )]
-    let length = (4 + body_len) as u16;
+    // Truncating here would emit a header that lies about its own body length,
+    // silently corrupting the file, so oversized bodies are an error instead.
+    let length = u16::try_from(4 + body_len).map_err(|_| {
+        WriteError::RecordTooLarge {
+            record_type,
+            body_len,
+            max: MAX_RECORD_BODY,
+        }
+    })?;
     let [a, b] = length.to_be_bytes();
     sink.write_all(&[a, b, record_type as u8, data_type as u8])?;
     Ok(())
@@ -131,6 +141,29 @@ fn write_i32_slice(
     Ok(())
 }
 
+/// Writes an element's coordinates as one or more XY records.
+///
+/// A single record holds at most [`MAX_XY_POINTS_PER_RECORD`] points. When
+/// `multi_xy` is set, a longer vertex list is split across consecutive XY
+/// records -- the `KLayout` convention, which [`crate::parser::GdsParser`] reads
+/// back as one element. Otherwise the oversized body is reported as
+/// [`WriteError::RecordTooLarge`] rather than written as non-spec output.
+fn write_xy(
+    sink: &mut impl Write,
+    coords: &[I32],
+    multi_xy: bool,
+) -> Result<(), WriteError> {
+    // Chunk length is even, so a chunk boundary never splits an (x, y) pair.
+    let max_coords = MAX_XY_POINTS_PER_RECORD * 2;
+    if !multi_xy || coords.len() <= max_coords {
+        return write_i32_slice(sink, RecordType::Xy, coords);
+    }
+    for chunk in coords.chunks(max_coords) {
+        write_i32_slice(sink, RecordType::Xy, chunk)?;
+    }
+    Ok(())
+}
+
 fn write_raw_real(
     sink: &mut impl Write,
     record_type: RecordType,
@@ -204,16 +237,21 @@ fn write_strans(
 fn write_boundary(
     sink: &mut impl Write,
     b: &Boundary<'_>,
+    multi_xy: bool,
 ) -> Result<(), WriteError> {
     write_no_data(sink, RecordType::Boundary)?;
     write_elflags_plex(sink, b.elflags, b.plex)?;
     write_i16(sink, RecordType::Layer, b.layer)?;
     write_i16(sink, RecordType::Datatype, b.datatype)?;
-    write_i32_slice(sink, RecordType::Xy, b.xy)?;
+    write_xy(sink, &b.xy, multi_xy)?;
     Ok(())
 }
 
-fn write_path(sink: &mut impl Write, p: &Path<'_>) -> Result<(), WriteError> {
+fn write_path(
+    sink: &mut impl Write,
+    p: &Path<'_>,
+    multi_xy: bool,
+) -> Result<(), WriteError> {
     write_no_data(sink, RecordType::Path)?;
     write_elflags_plex(sink, p.elflags, p.plex)?;
     write_i16(sink, RecordType::Layer, p.layer)?;
@@ -230,7 +268,7 @@ fn write_path(sink: &mut impl Write, p: &Path<'_>) -> Result<(), WriteError> {
     if let Some(e) = p.end_extn {
         write_i32(sink, RecordType::EndExtn, e)?;
     }
-    write_i32_slice(sink, RecordType::Xy, p.xy)?;
+    write_xy(sink, &p.xy, multi_xy)?;
     Ok(())
 }
 
@@ -241,7 +279,7 @@ fn write_sref(sink: &mut impl Write, s: &Sref<'_>) -> Result<(), WriteError> {
     if let Some(ref st) = s.strans {
         write_strans(sink, st)?;
     }
-    write_i32_slice(sink, RecordType::Xy, s.xy)?;
+    write_i32_slice(sink, RecordType::Xy, &s.xy)?;
     Ok(())
 }
 
@@ -260,7 +298,7 @@ fn write_aref(sink: &mut impl Write, a: &Aref<'_>) -> Result<(), WriteError> {
     )?;
     sink.write_all(&a.colrow.0.to_be_bytes())?;
     sink.write_all(&a.colrow.1.to_be_bytes())?;
-    write_i32_slice(sink, RecordType::Xy, a.xy)?;
+    write_i32_slice(sink, RecordType::Xy, &a.xy)?;
     Ok(())
 }
 
@@ -281,17 +319,21 @@ fn write_text(sink: &mut impl Write, t: &Text<'_>) -> Result<(), WriteError> {
     if let Some(ref st) = t.strans {
         write_strans(sink, st)?;
     }
-    write_i32_slice(sink, RecordType::Xy, t.xy)?;
+    write_i32_slice(sink, RecordType::Xy, &t.xy)?;
     write_str(sink, RecordType::String, t.string)?;
     Ok(())
 }
 
-fn write_node(sink: &mut impl Write, n: &Node<'_>) -> Result<(), WriteError> {
+fn write_node(
+    sink: &mut impl Write,
+    n: &Node<'_>,
+    multi_xy: bool,
+) -> Result<(), WriteError> {
     write_no_data(sink, RecordType::Node)?;
     write_elflags_plex(sink, n.elflags, n.plex)?;
     write_i16(sink, RecordType::Layer, n.layer)?;
     write_i16(sink, RecordType::Nodetype, n.nodetype)?;
-    write_i32_slice(sink, RecordType::Xy, n.xy)?;
+    write_xy(sink, &n.xy, multi_xy)?;
     Ok(())
 }
 
@@ -303,7 +345,7 @@ fn write_gds_box(
     write_elflags_plex(sink, b.elflags, b.plex)?;
     write_i16(sink, RecordType::Layer, b.layer)?;
     write_i16(sink, RecordType::BoxType, b.boxtype)?;
-    write_i32_slice(sink, RecordType::Xy, b.xy)?;
+    write_i32_slice(sink, RecordType::Xy, &b.xy)?;
     Ok(())
 }
 
@@ -319,12 +361,29 @@ fn write_gds_box(
 pub struct GdsWriter<W: Write> {
     sink: W,
     needs_endel: bool,
+    multi_xy: bool,
 }
 
 impl<W: Write> GdsWriter<W> {
     /// Creates a new writer over the given sink.
     pub const fn new(sink: W) -> Self {
-        Self { sink, needs_endel: false }
+        Self { sink, needs_endel: false, multi_xy: false }
+    }
+
+    /// Allows elements with more vertices than one XY record can hold to be
+    /// split across consecutive XY records.
+    ///
+    /// A record's `u16` length field caps one XY record at 8190 points. GDSII
+    /// has no representation for a larger element, so by default one is
+    /// reported as [`WriteError::RecordTooLarge`] and the caller decides
+    /// whether to fracture it. Enabling this emits the `KLayout` `multi_xy`
+    /// form instead: several consecutive XY records that
+    /// [`crate::parser::GdsParser`] reads back as a single element. Readers
+    /// that do not implement the convention will reject or misread the result.
+    #[must_use]
+    pub const fn with_multi_xy(mut self, multi_xy: bool) -> Self {
+        self.multi_xy = multi_xy;
+        self
     }
 
     /// Consumes the writer and returns the underlying sink.
@@ -417,13 +476,16 @@ impl<W: Write> GdsWriter<W> {
     }
 
     fn write_element(&mut self, elem: &Element<'_>) -> Result<(), WriteError> {
+        // SREF/AREF/TEXT/BOX have a fixed, tiny vertex count, so they can never
+        // overflow a record and take no part in XY splitting.
+        let multi_xy = self.multi_xy;
         match elem {
-            Element::Boundary(b) => write_boundary(&mut self.sink, b),
-            Element::Path(p) => write_path(&mut self.sink, p),
+            Element::Boundary(b) => write_boundary(&mut self.sink, b, multi_xy),
+            Element::Path(p) => write_path(&mut self.sink, p, multi_xy),
             Element::Sref(s) => write_sref(&mut self.sink, s),
             Element::Aref(a) => write_aref(&mut self.sink, a),
             Element::Text(t) => write_text(&mut self.sink, t),
-            Element::Node(n) => write_node(&mut self.sink, n),
+            Element::Node(n) => write_node(&mut self.sink, n, multi_xy),
             Element::Box(b) => write_gds_box(&mut self.sink, b),
         }
     }
@@ -443,4 +505,99 @@ pub fn write_all<'data>(
         writer.write_event(&event)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reader::{RecordBody, RecordIter};
+
+    /// Coordinates that encode their own index, so a point dropped, duplicated,
+    /// or reordered at a record boundary changes the result.
+    fn indexed_coords(points: usize) -> Vec<I32> {
+        (0..points)
+            .flat_map(|i| {
+                let i = i32::try_from(i).expect("point index fits i32");
+                [I32::new(i), I32::new(-i)]
+            })
+            .collect()
+    }
+
+    fn write_boundary_bytes(
+        xy: &[I32],
+        multi_xy: bool,
+    ) -> Result<Vec<u8>, WriteError> {
+        let event = GdsEvent::Element(Element::Boundary(Boundary {
+            elflags: None,
+            plex: None,
+            layer: 5,
+            datatype: 3,
+            xy: xy.into(),
+        }));
+        let mut writer = GdsWriter::new(Vec::new()).with_multi_xy(multi_xy);
+        writer.write_event(&event)?;
+        Ok(writer.into_inner())
+    }
+
+    /// Points carried by each XY record in `bytes`, in order.
+    fn xy_record_point_counts(bytes: &[u8]) -> Vec<usize> {
+        RecordIter::new(bytes)
+            .map(|r| r.expect("record parse failed"))
+            .filter(|r| r.header.record_type() == RecordType::Xy)
+            .map(|r| (usize::from(r.header.length().get()) - 4) / 8)
+            .collect()
+    }
+
+    #[test]
+    fn multi_xy_splits_an_oversized_boundary() {
+        let coords = indexed_coords(MAX_XY_POINTS_PER_RECORD + 61);
+        let bytes = write_boundary_bytes(&coords, true).expect("write failed");
+        assert_eq!(
+            xy_record_point_counts(&bytes),
+            [MAX_XY_POINTS_PER_RECORD, 61]
+        );
+    }
+
+    #[test]
+    fn multi_xy_split_preserves_every_coordinate() {
+        let coords = indexed_coords(MAX_XY_POINTS_PER_RECORD + 61);
+        let bytes = write_boundary_bytes(&coords, true).expect("write failed");
+        let written: Vec<I32> = RecordIter::new(&bytes)
+            .map(|r| r.expect("record parse failed"))
+            .filter(|r| r.header.record_type() == RecordType::Xy)
+            .flat_map(|r| match r.body {
+                RecordBody::FourByteSignedInt(v) => v.to_vec(),
+                other => panic!("expected an XY body, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(written, coords);
+    }
+
+    #[test]
+    fn multi_xy_leaves_a_fitting_boundary_in_one_record() {
+        let coords = indexed_coords(MAX_XY_POINTS_PER_RECORD);
+        let bytes = write_boundary_bytes(&coords, true).expect("write failed");
+        assert_eq!(xy_record_point_counts(&bytes), [MAX_XY_POINTS_PER_RECORD]);
+    }
+
+    #[test]
+    fn oversized_boundary_errors_without_multi_xy() {
+        // The default: GDSII cannot describe this element, so the caller is
+        // told rather than handed a header that lies about its body length.
+        let coords = indexed_coords(MAX_XY_POINTS_PER_RECORD + 61);
+        let expected_body_len = coords.len() * 4;
+        let err = write_boundary_bytes(&coords, false)
+            .expect_err("expected RecordTooLarge");
+        assert!(
+            matches!(
+                err,
+                WriteError::RecordTooLarge {
+                    record_type: RecordType::Xy,
+                    body_len,
+                    max: MAX_RECORD_BODY,
+                } if body_len == expected_body_len
+            ),
+            "unexpected error: {err}"
+        );
+    }
 }

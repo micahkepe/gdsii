@@ -15,6 +15,26 @@ use zerocopy::{
     big_endian::{I32, U16},
 };
 
+/// Largest record body a record can declare.
+///
+/// A record's length field is a `u16` covering its own 4-byte header, so the
+/// body is bounded at `u16::MAX - 4`.
+pub const MAX_RECORD_BODY: usize = u16::MAX as usize - 4;
+
+/// Points placed in one XY record when an element is split across several.
+///
+/// [`MAX_RECORD_BODY`] leaves room for 8191 points of 8 bytes, but `KLayout`
+/// splits at 8190, and matching it keeps written files shaped like the ones
+/// found in the wild.
+///
+/// GDSII has no representation for an element with more points than one record
+/// holds. [`GdsWriter`](crate::writer::GdsWriter) therefore rejects one by
+/// default, and this is the boundary to fracture geometry on to stay within a
+/// single record. Enabling
+/// [`with_multi_xy`](crate::writer::GdsWriter::with_multi_xy) splits on it
+/// instead.
+pub const MAX_XY_POINTS_PER_RECORD: usize = 8190;
+
 /// GDSII Record Type (1 byte).
 ///
 /// Records are always an even number of bytes long. The first four bytes of a record are the
