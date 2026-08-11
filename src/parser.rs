@@ -126,7 +126,7 @@ pub struct Strans {
 ///
 /// Derefs to `[I32]`, so `len`, `iter`, indexing and slicing work directly.
 ///
-/// NOTE: [`len`](Self::len) counts *coordinates*; use
+/// NOTE: [`len`](slice::len) counts *coordinates*; use
 /// [`num_points`](Self::num_points) for the vertex count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XyCoords<'data>(Cow<'data, [I32]>);
