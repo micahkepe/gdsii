@@ -33,17 +33,29 @@ pub enum RecordBody<'data> {
     AsciiString(&'data str),
 }
 
-/// Error encountered while parsed GDS record body.
+/// Error encountered while reading a GDS record.
 #[derive(Debug, thiserror::Error)]
-pub enum BodyParseError {
+pub enum RecordError {
+    /// Data/ datatype mismatch.
     #[error(
         "data does not match the expected datatype: expected {expected:?}, found: {found:?}"
     )]
     Invalid { expected: DataType, found: Vec<u8> },
+    /// NOTE: Length field must be **at least** 4 since the length field of the record includes the
+    /// 4-byte header.
+    #[error(
+        "record at offset {offset} declares {length} bytes, which is less than the 4-byte header"
+    )]
+    InvalidLength { offset: usize, length: u16 },
+    /// The length field runs past the end of the input.
+    #[error(
+        "record at offset {offset} declares length of {length} bytes, but only {available} bytes remain"
+    )]
+    Truncated { offset: usize, length: usize, available: usize },
 }
 
 impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
-    type Error = BodyParseError;
+    type Error = RecordError;
 
     fn try_from(
         (data_type, body): (DataType, &'data [u8]),
@@ -53,21 +65,21 @@ impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
             DataType::BitArray => <[U16]>::try_ref_from_bytes(body)
                 .ok()
                 .map(Self::BitArray)
-                .ok_or_else(|| BodyParseError::Invalid {
+                .ok_or_else(|| RecordError::Invalid {
                     expected: DataType::BitArray,
                     found: body.to_vec(),
                 }),
             DataType::TwoByteSignedInt => <[I16]>::try_ref_from_bytes(body)
                 .ok()
                 .map(Self::TwoByteSignedInt)
-                .ok_or_else(|| BodyParseError::Invalid {
+                .ok_or_else(|| RecordError::Invalid {
                     expected: DataType::TwoByteSignedInt,
                     found: body.to_vec(),
                 }),
             DataType::FourByteSignedInt => <[I32]>::try_ref_from_bytes(body)
                 .ok()
                 .map(Self::FourByteSignedInt)
-                .ok_or_else(|| BodyParseError::Invalid {
+                .ok_or_else(|| RecordError::Invalid {
                     expected: DataType::FourByteSignedInt,
                     found: body.to_vec(),
                 }),
@@ -75,7 +87,7 @@ impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
                 <[GdsFourByteReal]>::try_ref_from_bytes(body)
                     .ok()
                     .map(Self::FourByteReal)
-                    .ok_or_else(|| BodyParseError::Invalid {
+                    .ok_or_else(|| RecordError::Invalid {
                         expected: DataType::FourByteReal,
                         found: body.to_vec(),
                     })
@@ -84,7 +96,7 @@ impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
                 <[GdsEightByteReal]>::try_ref_from_bytes(body)
                     .ok()
                     .map(Self::EightByteReal)
-                    .ok_or_else(|| BodyParseError::Invalid {
+                    .ok_or_else(|| RecordError::Invalid {
                         expected: DataType::EightByteReal,
                         found: body.to_vec(),
                     })
@@ -93,7 +105,7 @@ impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
                 .map(|s| s.trim_end_matches('\0'))
                 .map_or_else(
                     |_| {
-                        Err(BodyParseError::Invalid {
+                        Err(RecordError::Invalid {
                             expected: DataType::AsciiString,
                             found: body.to_vec(),
                         })
@@ -137,26 +149,42 @@ impl<'data> RecordIter<'data> {
 }
 
 impl<'data> Iterator for RecordIter<'data> {
-    type Item = Result<Record<'data>, BodyParseError>;
+    type Item = Result<Record<'data>, RecordError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match RecordHeader::try_ref_from_prefix(&self.input[self.offset..]) {
-            Ok((header, rest)) => {
-                let length = usize::from(header.length().get());
-                // Strip the 4 byte header from the body
-                let body_bytes = &rest[..length - 4];
-                let body = match RecordBody::try_from((
-                    header.data_type(),
-                    body_bytes,
-                )) {
-                    Ok(body) => body,
-                    Err(e) => return Some(Err(e)),
-                };
-                self.offset += length;
-                Some(Ok(Record { header: *header, body }))
-            }
-            _ => None,
+        let Ok((header, rest)) =
+            RecordHeader::try_ref_from_prefix(&self.input[self.offset..])
+        else {
+            return None;
+        };
+        let offset = self.offset;
+        let length = header.length().get();
+
+        // On malformed records, fuse the records.
+        let Some(body_len) = usize::from(length).checked_sub(4) else {
+            self.offset = self.input.len();
+            return Some(Err(RecordError::InvalidLength { offset, length }));
+        };
+        if body_len > rest.len() {
+            self.offset = self.input.len();
+            return Some(Err(RecordError::Truncated {
+                offset,
+                length: usize::from(length),
+                available: self.input.len() - offset,
+            }));
         }
+
+        let body =
+            match RecordBody::try_from((header.data_type(), &rest[..body_len]))
+            {
+                Ok(body) => body,
+                Err(e) => {
+                    self.offset = self.input.len();
+                    return Some(Err(e));
+                }
+            };
+        self.offset += usize::from(length);
+        Some(Ok(Record { header: *header, body }))
     }
 }
 

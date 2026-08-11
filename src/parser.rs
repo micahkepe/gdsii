@@ -7,7 +7,7 @@
 use zerocopy::big_endian::{I16, I32};
 
 use crate::float::GdsEightByteReal;
-use crate::reader::{BodyParseError, Record, RecordBody, RecordIter};
+use crate::reader::{Record, RecordBody, RecordError, RecordIter};
 use crate::types::RecordType;
 
 /// Errors that can occur during GDS stream parsing.
@@ -24,7 +24,7 @@ pub enum ParseError {
     WrongBodyType { record_type: RecordType, expected: &'static str },
     /// Underlying record body could not be parsed.
     #[error(transparent)]
-    Body(#[from] BodyParseError),
+    Body(#[from] RecordError),
 }
 
 // ==============================================================================
@@ -954,14 +954,10 @@ mod tests {
             &[0u8; 24],
         ));
         buf.extend(string_record(RecordType::LibName, "TEST"));
-        buf.extend(gds_record(
-            RecordType::Units,
-            DataType::EightByteReal,
-            &[
-                0x3E, 0x41, 0x89, 0x37, 0x4B, 0xC6, 0xA7, 0xEF, // 0.001
-                0x39, 0x44, 0xB8, 0x2F, 0xA0, 0x9B, 0x5A, 0x54, // 1e-9
-            ],
-        )); // UNITS
+        buf.extend(gds_record(RecordType::Units, DataType::EightByteReal, &[
+            0x3E, 0x41, 0x89, 0x37, 0x4B, 0xC6, 0xA7, 0xEF, // 0.001
+            0x39, 0x44, 0xB8, 0x2F, 0xA0, 0x9B, 0x5A, 0x54, // 1e-9
+        ])); // UNITS
         buf.extend_from_slice(inner);
         buf.extend(no_data_record(RecordType::EndLib));
         buf
