@@ -237,4 +237,42 @@ mod tests {
         // Header must be at least 4 bytes
         assert!(RecordIter::new(&[0x00, 0x00, 0x00]).next().is_none());
     }
+
+    #[test]
+    fn iter_rejects_length_below_header() {
+        // A length field of 0 is what NUL padding after ENDLIB looks like, and
+        // is also the shape that used to underflow `length - 4`.
+        let mut iter = RecordIter::new(&[0x00, 0x00, 0x00, 0x00]);
+        assert!(matches!(
+            iter.next(),
+            Some(Err(RecordError::InvalidLength { offset: 0, length: 0 }))
+        ));
+        // Fused: a bogus length leaves no safe distance to skip ahead by.
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn iter_rejects_truncated_record() {
+        // HEADER declaring 6 bytes with only 5 present.
+        let mut iter = RecordIter::new(&[0x00, 0x06, 0x00, 0x02, 0x00]);
+        assert!(matches!(
+            iter.next(),
+            Some(Err(RecordError::Truncated {
+                offset: 0,
+                length: 6,
+                available: 5
+            }))
+        ));
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn iter_fuses_after_a_body_type_error() {
+        // LAYER claiming AsciiString with invalid UTF-8. Before fusing, the
+        // offset never advanced past a body error, so `next` repeated it
+        // forever.
+        let mut iter = RecordIter::new(&[0x00, 0x06, 0x0D, 0x06, 0xFF, 0xFF]);
+        assert!(matches!(iter.next(), Some(Err(RecordError::Invalid { .. }))));
+        assert!(iter.next().is_none());
+    }
 }

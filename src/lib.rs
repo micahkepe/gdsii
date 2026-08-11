@@ -4,6 +4,10 @@
 //! allocation during parsing. All borrowed data references the original input
 //! buffer. The writer serializes events back to spec-compliant GDSII bytes.
 //!
+//! NOTE: The one exception to the no-allocation rule is an element whose
+//! vertices are split across several XY records, which is stitched into an
+//! owned buffer. See [`XyCoords`](parser::XyCoords).
+//!
 //! # Quick start
 //!
 //! ```rust,no_run
