@@ -47,7 +47,9 @@ allocates an owned tree with `String` and `Vec<GdsPoint>` per element.
 > [!NOTE]
 > Benchmarked on Apple M5 Pro (single-threaded, `--release` profile).
 
-To reproduce, generate synthetic files and run the benchmark:
+To reproduce, generate synthetic files and run the benchmark. The examples are
+not shipped in the published crate, so this needs a
+[repository](https://github.com/micahkepe/gdsii) checkout:
 
 ```bash
 # Generate test files (roughly 1 MB, 30 MB, 300 MB, 1 GB)

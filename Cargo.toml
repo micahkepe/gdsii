@@ -3,13 +3,16 @@ name = "gdsii"
 version = "0.3.0"
 authors = ["Micah Kepe <micahkepe@gmail.com>"]
 edition = "2024"
+# `cast_signed`/`cast_unsigned` in float.rs and `is_multiple_of` both stabilized
+# in 1.87; nothing in the crate needs anything newer.
+rust-version = "1.87"
 description = "Fast, zero-copy, streaming GDSII parser and writer."
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/micahkepe/gdsii"
 homepage = "https://github.com/micahkepe/gdsii"
 keywords = ["gdsii", "gds", "eda", "layout", "parser"]
-exclude = ["tests/data/", "examples/", ".github/"]
+exclude = ["tests/", "examples/", ".github/"]
 
 [dependencies]
 thiserror = "2.0.18"
