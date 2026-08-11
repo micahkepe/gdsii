@@ -25,3 +25,6 @@ nursery = { level = "warn" }
 gds21 = "0.2.0"
 quickcheck = "1.1.0"
 quickcheck_macros = "1.2.0"
+
+[profile.test]
+opt-level = 2

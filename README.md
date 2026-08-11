@@ -96,7 +96,8 @@ let mut writer = GdsWriter::new(&mut out).with_multi_xy(true);
 for event in &events {
     writer.write_event(event).unwrap();
 }
-assert_eq!(out.len(), data.len());
+// Trailing data after ENDLIB is not re-emitted, so output can be shorter.
+assert!(out.len() <= data.len());
 ```
 
 ## Event types
