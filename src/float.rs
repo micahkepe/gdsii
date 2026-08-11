@@ -50,6 +50,7 @@ pub struct NotRepresentable;
 pub struct GdsFourByteReal([u8; 4]);
 
 impl GdsFourByteReal {
+    /// Returns the raw bytes.
     #[must_use]
     pub const fn raw(&self) -> [u8; 4] {
         self.0
@@ -116,6 +117,7 @@ impl TryFrom<f64> for GdsFourByteReal {
 pub struct GdsEightByteReal([u8; 8]);
 
 impl GdsEightByteReal {
+    /// Returns the raw bytes contained.
     #[must_use]
     pub const fn raw(&self) -> [u8; 8] {
         self.0

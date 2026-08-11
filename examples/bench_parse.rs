@@ -1,4 +1,4 @@
-#![allow(clippy::cast_precision_loss)]
+#![expect(clippy::cast_precision_loss, missing_docs)]
 use std::time::{Duration, Instant};
 
 use gdsii::parser::GdsParser;

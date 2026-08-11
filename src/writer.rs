@@ -29,7 +29,14 @@ pub enum WriteError {
     #[error(
         "{record_type:?} body of {body_len} bytes exceeds the {max}-byte maximum record body"
     )]
-    RecordTooLarge { record_type: RecordType, body_len: usize, max: usize },
+    RecordTooLarge {
+        /// The record whose body did not fit.
+        record_type: RecordType,
+        /// Body size that was requested, in bytes.
+        body_len: usize,
+        /// Largest body a record can declare, i.e. [`MAX_RECORD_BODY`].
+        max: usize,
+    },
 }
 
 // ==============================================================================

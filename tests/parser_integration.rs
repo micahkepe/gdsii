@@ -1,3 +1,4 @@
+#![expect(missing_docs)]
 use gdsii::parser::{Element, GdsEvent, GdsParser};
 
 const EXAMPLE: &[u8] = include_bytes!("data/example.cal");

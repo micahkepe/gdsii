@@ -19,13 +19,26 @@ use crate::types::RecordType;
 pub enum ParseError {
     /// Record type does not match what the grammar expects at this position.
     #[error("unexpected record {found:?} in {context}")]
-    UnexpectedRecord { found: RecordType, context: &'static str },
+    UnexpectedRecord {
+        /// The record type actually encountered.
+        found: RecordType,
+        /// Grammar position the parser was in, e.g. `"Boundary"`.
+        context: &'static str,
+    },
     /// Record stream ended before a required record was found.
     #[error("unexpected end of records in {context}")]
-    UnexpectedEof { context: &'static str },
+    UnexpectedEof {
+        /// Grammar position the parser was in when the stream ended.
+        context: &'static str,
+    },
     /// Record body data type does not match the expected variant.
     #[error("{record_type:?} body: expected {expected}")]
-    WrongBodyType { record_type: RecordType, expected: &'static str },
+    WrongBodyType {
+        /// The record whose body had the wrong type.
+        record_type: RecordType,
+        /// Name of the [`RecordBody`] variant the grammar requires here.
+        expected: &'static str,
+    },
     /// Underlying record body could not be parsed.
     #[error(transparent)]
     Body(#[from] RecordError),
@@ -187,12 +200,19 @@ impl From<Vec<I32>> for XyCoords<'_> {
 /// Parsed GDS element (geometry or reference).
 #[derive(Debug)]
 pub enum Element<'data> {
+    /// Filled polygon.
     Boundary(Boundary<'data>),
+    /// Wire-like path with optional width and endpoint style.
     Path(Path<'data>),
+    /// Single reference to another structure.
     Sref(Sref<'data>),
+    /// Rectangular array of references to another structure.
     Aref(Aref<'data>),
+    /// Text label.
     Text(Text<'data>),
+    /// Electrical node, carrying no drawn geometry.
     Node(Node<'data>),
+    /// Box, distinct from a four-sided [`Boundary`].
     Box(GdsBox<'data>),
 }
 

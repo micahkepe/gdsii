@@ -393,6 +393,7 @@ pub enum GdsVersion {
     Immutable,
 )]
 pub enum DataType {
+    /// No data present: the record is its 4-byte header and nothing more.
     NoData = 0x00,
     /// A bit array is a word which uses the value of a particular bit or group of bits to
     /// represent data. A bit array allows oneword to represent a number of simple pieces of

@@ -15,6 +15,7 @@
 //!
 //! Elements whose vertices span several XY records are the one place parsing
 //! allocates; see [`XyCoords`](parser::XyCoords).
+#![deny(missing_docs)]
 pub mod float;
 pub mod parser;
 pub mod reader;

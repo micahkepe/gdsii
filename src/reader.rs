@@ -15,21 +15,35 @@ use crate::{
 /// Parsed GDS record, including its header and associated data.
 #[derive(Debug)]
 pub struct Record<'data> {
+    /// The record's header.
+    ///
+    /// See:
+    /// <https://boolean.klaasholwerda.nl/interface/bnf/gdsformat.html#recordheader>.
     pub header: RecordHeader,
+    /// The record's body.
     pub body: RecordBody<'data>,
 }
 
 /// Payload data contained within a `Record`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum RecordBody<'data> {
+    /// Header-only record, carrying no body.
     NoData,
+    /// Two-byte bit fields, e.g. ELFLAGS, STRANS, PRESENTATION.
     BitArray(&'data [U16]),
+    /// Signed 16-bit integers, e.g. LAYER, DATATYPE, timestamps.
     TwoByteSignedInt(&'data [I16]),
+    /// Signed 32-bit integers, e.g. XY coordinates, WIDTH, PLEX.
     FourByteSignedInt(&'data [I32]),
+    /// GDS base-16 four-byte reals.
+    ///
     /// NOTE: raw bytes here because needs custom conversion to `f32`.
     FourByteReal(&'data [GdsFourByteReal]),
+    /// GDS base-16 eight-byte reals, e.g. UNITS, MAG, ANGLE.
+    ///
     /// NOTE: raw bytes here because needs custom conversion to `f64`.
     EightByteReal(&'data [GdsEightByteReal]),
+    /// ASCII text with any trailing NUL padding already trimmed.
     AsciiString(&'data str),
 }
 
@@ -40,18 +54,35 @@ pub enum RecordError {
     #[error(
         "data does not match the expected datatype: expected {expected:?}, found: {found:?}"
     )]
-    Invalid { expected: DataType, found: Vec<u8> },
+    Invalid {
+        /// Data type the record header declared.
+        expected: DataType,
+        /// Body bytes that could not be read as that type.
+        found: Vec<u8>,
+    },
     /// NOTE: Length field must be **at least** 4 since the length field of the record includes the
     /// 4-byte header.
     #[error(
         "record at offset {offset} declares {length} bytes, which is less than the 4-byte header"
     )]
-    InvalidLength { offset: usize, length: u16 },
+    InvalidLength {
+        /// Byte offset of the record header in the input.
+        offset: usize,
+        /// The impossible length the header declared.
+        length: u16,
+    },
     /// The length field runs past the end of the input.
     #[error(
         "record at offset {offset} declares length of {length} bytes, but only {available} bytes remain"
     )]
-    Truncated { offset: usize, length: usize, available: usize },
+    Truncated {
+        /// Byte offset of the record header in the input.
+        offset: usize,
+        /// Total record length the header declared, header included.
+        length: usize,
+        /// Bytes actually remaining from `offset` to the end of the input.
+        available: usize,
+    },
 }
 
 impl<'data> TryFrom<(DataType, &'data [u8])> for RecordBody<'data> {
