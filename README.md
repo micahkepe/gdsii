@@ -11,7 +11,8 @@
 
 Parses [GDSII](https://en.wikipedia.org/wiki/GDSII) binary layout files into a
 [SAX](https://en.wikipedia.org/wiki/Simple_API_for_XML)-style event stream with
-no heap allocation during parsing. All borrowed data references the original
+no heap allocation during parsing, the sole exception being elements whose
+vertices span several XY records. All borrowed data references the original
 input buffer. The writer serializes events back to spec-compliant GDSII bytes,
 enabling read-transform-write pipelines with no intermediate tree.
 
@@ -22,7 +23,12 @@ enabling read-transform-write pipelines with no intermediate tree.
 - **Lossless float roundtrips**: GDS base-16 reals encode/decode via IEEE 754
   bit extraction
 - **Byte-exact writer**: `GdsWriter` produces output identical to the input for
-  well-formed files
+  well-formed files; files whose polygons exceed one XY record need
+  `with_multi_xy` (see below)
+- **Oversized polygons**: a record's `u16` length field caps one XY record at
+  8190 points, and tools such as `KLayout` emit larger elements as several
+  consecutive XY records. These are read transparently and can be written back
+  via `GdsWriter::with_multi_xy`, rather than silently truncated
 - **All element types**: Boundary, Path, Sref, Aref, Text, Node, Box, with
   ELFLAGS, PLEX, and properties
 
@@ -64,7 +70,7 @@ done
 
 ## Quick start
 
-```rust
+```rust,no_run
 use gdsii::parser::{GdsParser, GdsEvent, Element};
 use gdsii::writer::GdsWriter;
 
@@ -73,7 +79,7 @@ let data = std::fs::read("layout.gds").unwrap();
 for event in GdsParser::new(&data) {
     match event.unwrap() {
         GdsEvent::Element(Element::Boundary(b)) => {
-            println!("layer={}, points={}", b.layer, b.xy.len() / 2);
+            println!("layer={}, points={}", b.layer, b.xy.num_points());
         }
         _ => {}
     }
@@ -84,7 +90,9 @@ let events: Vec<_> = GdsParser::new(&data)
     .collect::<Result<_, _>>()
     .unwrap();
 let mut out = Vec::new();
-let mut writer = GdsWriter::new(&mut out);
+// with_multi_xy preserves elements whose vertices span several XY records.
+// Without it, those are a RecordTooLarge error rather than non-spec output.
+let mut writer = GdsWriter::new(&mut out).with_multi_xy(true);
 for event in &events {
     writer.write_event(event).unwrap();
 }
@@ -107,4 +115,4 @@ for more information.
 
 ## License
 
-MIT - see [LICENSE.md](LICENSE.md).
+MIT - see [LICENSE](https://github.com/micahkepe/gdsii/blob/main/LICENSE).

@@ -1,28 +1,6 @@
-//! Fast, zero-copy, streaming [GDSII] parser and writer.
-//!
-//! Parses GDSII binary layout files into a SAX-style event stream with no heap
-//! allocation during parsing. All borrowed data references the original input
-//! buffer. The writer serializes events back to spec-compliant GDSII bytes.
-//!
-//! NOTE: The one exception to the no-allocation rule is an element whose
-//! vertices are split across several XY records, which is stitched into an
-//! owned buffer. See [`XyCoords`](parser::XyCoords).
-//!
-//! # Quick start
-//!
-//! ```rust,no_run
-//! use gdsii::parser::{GdsParser, GdsEvent, Element};
-//!
-//! let data = std::fs::read("layout.gds").unwrap();
-//! for event in GdsParser::new(&data) {
-//!     match event.unwrap() {
-//!         GdsEvent::Element(Element::Boundary(b)) => {
-//!             println!("layer={}, points={}", b.layer, b.xy.len() / 2);
-//!         }
-//!         _ => {}
-//!     }
-//! }
-//! ```
+// The README is the crate-level documentation, so `cargo test` compiles its
+// examples and they cannot drift from the API.
+#![doc = include_str!("../README.md")]
 //!
 //! # Modules
 //!
@@ -35,7 +13,8 @@
 //! - [`float`]: GDS base-16 float encoding ([`GdsEightByteReal`],
 //!   [`GdsFourByteReal`])
 //!
-//! [GDSII]: <https://en.wikipedia.org/wiki/GDSII>
+//! Elements whose vertices span several XY records are the one place parsing
+//! allocates; see [`XyCoords`](parser::XyCoords).
 pub mod float;
 pub mod parser;
 pub mod reader;
